@@ -1,0 +1,21 @@
+appId: com.refract.app
+productName: Refract
+directories:
+  output: dist
+  buildResources: build
+files:
+  - out/**/*
+  - out-renderer/**/*
+  - package.json
+mac:
+  target:
+    - dmgs
+    - zip
+  category: public.app-category.developer-tools
+win:
+  target:
+    - nsis
+    - zip
+nsis:
+  oneClick: false
+  allowToChangeInstallationDirectory: true
