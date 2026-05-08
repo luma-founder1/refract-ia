@@ -10,23 +10,16 @@
     "strict": true,
     "forceConsistentCasingInFileNames": true,
     "module": "ESNext",
-    "moduleResolution": "Node",
+    "moduleResolution": "bundler",
     "resolveJsonModule": true,
     "isolatedModules": true,
     "noEmit": true,
     "jsx": "react-jsx",
     "baseUrl": ".",
     "paths": {
-      "@main/*": ["src/main/*"],
-      "@renderer/*": ["src/renderer/*"],
-      "@shared/*": ["src/shared/*"],
-      "@engine/*": ["src/main/engine/*"],
-      "@storage/*": ["src/main/storage/*"],
-      "@git/*": ["src/main/git/*"],
-      "@ipc/*": ["src/main/ipc/*"],
-      "@/*": ["src/renderer/*"]
+      "@/*": ["src/*"]
     }
   },
   "include": ["src"],
-  "exclude": ["node_modules", "out"]
+  "exclude": ["node_modules", "dist"]
 }

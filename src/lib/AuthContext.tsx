@@ -1,0 +1,94 @@
+import React, { createContext, useContext, useEffect, useState, useCallback } from 'react'
+import { Session } from '@supabase/supabase-js'
+import { supabase, UserProfile } from './supabase'
+
+// ─── Types ────────────────────────────────────────────────────────────────────
+
+interface AuthContextValue {
+  session: Session | null
+  profile: UserProfile | null
+  loading: boolean
+  refreshProfile: () => Promise<void>
+  signOut: () => Promise<void>
+}
+
+// ─── Context ──────────────────────────────────────────────────────────────────
+
+const AuthContext = createContext<AuthContextValue>({
+  session: null,
+  profile: null,
+  loading: true,
+  refreshProfile: async () => {},
+  signOut: async () => {},
+})
+
+export const useAuth = () => useContext(AuthContext)
+
+// ─── Provider ─────────────────────────────────────────────────────────────────
+
+export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const [session, setSession] = useState<Session | null>(null)
+  const [profile, setProfile] = useState<UserProfile | null>(null)
+  const [loading, setLoading] = useState(true)
+
+  // Fetch profile from the users table
+  const fetchProfile = useCallback(async (userId: string) => {
+    const { data, error } = await supabase
+      .from('users')
+      .select('*')
+      .eq('id', userId)
+      .single()
+
+    if (error) {
+      console.warn('[auth] profile not found:', error.message)
+      setProfile(null)
+    } else {
+      setProfile(data as UserProfile)
+    }
+  }, [])
+
+  const refreshProfile = useCallback(async () => {
+    if (session?.user?.id) {
+      await fetchProfile(session.user.id)
+    }
+  }, [session, fetchProfile])
+
+  const signOut = useCallback(async () => {
+    await supabase.auth.signOut()
+    setSession(null)
+    setProfile(null)
+  }, [])
+
+  // ── Bootstrap: get existing session on mount ──
+  useEffect(() => {
+    supabase.auth.getSession().then(async ({ data }) => {
+      const s = data.session
+      setSession(s)
+      try {
+        if (s?.user?.id) await fetchProfile(s.user.id)
+      } catch (e) {
+        console.error('[auth] failed to fetch profile during bootstrap:', e)
+      } finally {
+        setLoading(false)
+      }
+    })
+
+    // Listen for Supabase auth state changes (email/password, social)
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, s) => {
+      setSession(s)
+      if (s?.user?.id) {
+        await fetchProfile(s.user.id)
+      } else {
+        setProfile(null)
+      }
+    })
+
+    return () => subscription.unsubscribe()
+  }, [fetchProfile])
+
+  return (
+    <AuthContext.Provider value={{ session, profile, loading, refreshProfile, signOut }}>
+      {children}
+    </AuthContext.Provider>
+  )
+}
