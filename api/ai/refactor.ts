@@ -1,7 +1,7 @@
 import { createClient } from '@supabase/supabase-js'
-import Anthropic from '@anthropic-ai/sdk'
+import Groq from 'groq-sdk'
 
-const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY || '' })
+const groq = new Groq({ apiKey: process.env.GROQ_API_KEY || '' })
 
 const supabase = createClient(
   process.env.VITE_SUPABASE_URL || '',
@@ -38,15 +38,15 @@ ${instruction ? `\nInstrução adicional: ${instruction}` : ''}
 ${guidelines ? `\nGuidelines:\n${guidelines}` : ''}`
 
   try {
-    const msg = await anthropic.messages.create({
-      model: 'claude-sonnet-4-20250514',
+    const msg = await groq.chat.completions.create({
+      model: 'mixtral-8x7b-32768',
       max_tokens: 1024,
       system: systemPrompt,
       messages: [{ role: 'user', content: userPrompt }],
       temperature: 0.2,
     })
 
-    const text = (msg.content[0] as any)?.text ?? '{}'
+    const text = msg.choices[0]?.message?.content ?? '{}'
 
     let patch: { before: string; after: string }
     try {

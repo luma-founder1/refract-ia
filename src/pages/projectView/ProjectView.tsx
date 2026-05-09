@@ -16,18 +16,18 @@ import { useFiles } from '../../context/FilesContext'
 // ─── Constants ────────────────────────────────────────────────────────────────
 const C = {
   bg: 'var(--background)', 
-  surface: 'var(--background)', 
-  surfaceHover: 'var(--secondary)',
+  surface: 'var(--card)', 
+  surfaceHover: 'var(--accent)',
   border: 'var(--border)', 
   borderHover: 'rgba(255,255,255,0.4)', 
   text: 'var(--foreground)',
   muted: 'var(--muted-foreground)', 
-  subtle: '#222222', 
-  blue: '#ffffff', 
-  blueHover: '#ffffff', 
-  blueDim: 'rgba(255, 255, 255, 0.1)', 
-  green: '#ffffff', 
-  red: '#ffffff', 
+  subtle: 'var(--accent)', 
+  blue: 'var(--ring)', 
+  blueHover: 'var(--ring)', 
+  blueDim: 'rgba(0,153,255,0.1)', 
+  green: 'var(--semantic-success)', 
+  red: '#ff5577', 
 }
 
 const CATEGORY_META: Record<IssueCategory, { name: string; icon: string; impact: 'High' | 'Medium' | 'Low' }> = {
@@ -57,7 +57,7 @@ const CategoryIcon: React.FC<{ name: string; color?: string }> = ({ name, color 
 const ImpactBadge: React.FC<{ level: 'High' | 'Medium' | 'Low' }> = ({ level }) => {
   const styles: Record<string, React.CSSProperties> = {
     High:   { background: 'var(--foreground)', color: 'var(--background)' },
-    Medium: { background: 'var(--secondary)', color: 'var(--foreground)' },
+    Medium: { background: 'var(--accent)', color: 'var(--foreground)' },
     Low:    { background: 'var(--background)', color: 'var(--muted-foreground)', border: '1px solid var(--border)' },
   }
   return (
@@ -93,7 +93,7 @@ const AnalysingPanel: React.FC<{ files: any[]; scannedFiles: string[]; activeFil
         const done = scannedFiles.includes(f.path)
         const active = activeFile === f.path
         return (
-          <div key={f.path} style={{ height: 32, display: 'flex', alignItems: 'center', gap: 8, padding: '0 12px', borderRadius: 'var(--radius)', background: active ? 'var(--secondary)' : done ? 'var(--background)' : 'transparent', boxShadow: active ? '0 0 0 1px var(--ring)' : done ? 'var(--shadow-border)' : 'none', transition: 'all 0.15s ease' }}>
+          <div key={f.path} style={{ height: 32, display: 'flex', alignItems: 'center', gap: 8, padding: '0 12px', borderRadius: 'var(--radius)', background: active ? 'var(--accent)' : done ? 'var(--background)' : 'transparent', boxShadow: active ? '0 0 0 1px var(--ring)' : done ? 'var(--shadow-border)' : 'none', transition: 'all 0.15s ease' }}>
             <span style={{ fontSize: 11, color: done ? 'var(--foreground)' : 'var(--muted-foreground)', fontFamily: 'Geist Mono, monospace', flex: 1 }}>
               {f.name}
             </span>
@@ -217,7 +217,7 @@ const SuccessState: React.FC<{
     <div style={{ padding: '40px 32px', display: 'flex', flexDirection: 'column', alignItems: 'center', width: '100%' }}>
       <CheckCircle2 size={32} color="var(--primary)" style={{ marginBottom: 16 }} />
       <h2 className="page-title" style={{ marginBottom: 6 }}>Refract completo.</h2>
-      <p style={{ fontSize: 14, color: 'var(--muted-foreground)', marginBottom: 32 }}>Revisaste {Object.keys(decisions).length} sugestões.</p>
+      <p style={{ fontSize: 16, color: 'var(--muted-foreground)', marginBottom: 32 }}>Revisaste {Object.keys(decisions).length} sugestões.</p>
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 16, width: '100%', marginBottom: 36 }}>
         {metrics.map(m => (
@@ -269,6 +269,7 @@ export const ProjectView: React.FC<ProjectViewProps> = ({ projectId, onBack }) =
   const [flashType, setFlashType] = useState<Decision | null>(null)
   const [refineOpen, setRefineOpen] = useState(false)
   const [refineText, setRefineText] = useState('')
+  const [viewingFile, setViewingFile] = useState<string | null>(null)
   const [scannedFiles, setScannedFiles] = useState<string[]>([])
   const [activeFile, setActiveFile] = useState<string | null>(null)
   const [issueExplanation, setIssueExplanation] = useState<string | null>(null)
@@ -369,6 +370,20 @@ const [explanationCache, setExplanationCache] = useState<Record<string, string>>
   useEffect(() => {
     async function load() {
       if (!projectId) return
+      
+      if (projectId.startsWith('local-')) {
+        setProject({
+          id: projectId,
+          name: projectId.replace('local-', 'Project '),
+          path: 'uploaded',
+          repo: null,
+          branch: 'main',
+          status: 'Not analysed',
+          last_run: null
+        })
+        return
+      }
+
       try {
         const p = await getProject(projectId)
         setProject(p)
@@ -610,14 +625,14 @@ const [explanationCache, setExplanationCache] = useState<Record<string, string>>
                       setSelectedCat(null)
                     }}
                     style={{
-                      background: isCurrent ? C.blueDim : C.surface,
-                      border: `1px solid ${isCurrent ? C.blue : decision ? '#1a1a1a' : C.border}`,
-                      borderRadius: 6, padding: '10px 12px', cursor: 'pointer',
+                      background: isCurrent ? C.surfaceHover : C.surface,
+                      border: `1px solid ${isCurrent ? C.blue : decision ? 'var(--border)' : C.border}`,
+                      borderRadius: 10, padding: '12px 14px', cursor: 'pointer',
                       opacity: decision ? 0.5 : 1,
                       transition: 'all 0.12s ease',
                     }}
-                    onMouseEnter={e => { if (!isCurrent) (e.currentTarget as HTMLDivElement).style.background = 'var(--accent)' }}
-                    onMouseLeave={e => { if (!isCurrent) (e.currentTarget as HTMLDivElement).style.background = decision ? C.surface : C.surface }}
+                    onMouseEnter={e => { if (!isCurrent) (e.currentTarget as HTMLDivElement).style.background = C.surfaceHover }}
+                    onMouseLeave={e => { if (!isCurrent) (e.currentTarget as HTMLDivElement).style.background = C.surface }}
                   >
                     <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4 }}>
                       <span style={{ fontSize: 11, color: 'var(--foreground)', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
@@ -634,7 +649,7 @@ const [explanationCache, setExplanationCache] = useState<Record<string, string>>
                         </span>
                       )}
                       {issue.blastRadius !== undefined && issue.blastRadius > 0 && (
-                        <span style={{ fontSize: 9, color: 'var(--foreground)', background: 'var(--secondary)', borderRadius: 3, padding: '1px 5px' }}>
+                        <span style={{ fontSize: 9, color: 'var(--foreground)', background: 'var(--accent)', borderRadius: 3, padding: '1px 5px' }}>
                           blast: {issue.blastRadius}
                         </span>
                       )}
@@ -653,6 +668,7 @@ const [explanationCache, setExplanationCache] = useState<Record<string, string>>
           ? <span style={{ fontSize: 11, color: C.muted, paddingLeft: 6 }}>No files found.</span>
           : files.map(f => (
             <div key={f.path}
+              onClick={() => { if (!f.isDirectory) setViewingFile(f.path) }}
               onMouseEnter={() => setHoveredFile(f.path)}
               onMouseLeave={() => setHoveredFile(null)}
               style={{ height: 28, display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 6px', borderRadius: 4, background: hoveredFile === f.path ? '#111' : 'transparent', cursor: 'pointer', transition: 'background 0.12s ease' }}>
@@ -663,7 +679,9 @@ const [explanationCache, setExplanationCache] = useState<Record<string, string>>
                 </span>
               </div>
               {hoveredFile === f.path && !f.isDirectory && (
-                <button style={{ width: 18, height: 18, background: 'transparent', border: `1px solid ${C.border}`, borderRadius: 3, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <button 
+                  onClick={(e) => { e.stopPropagation(); setViewingFile(f.path) }}
+                  style={{ width: 18, height: 18, background: 'transparent', border: `1px solid ${C.border}`, borderRadius: 3, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                   <Eye size={10} color={C.muted} />
                 </button>
               )}
@@ -678,13 +696,27 @@ const [explanationCache, setExplanationCache] = useState<Record<string, string>>
   const CenterPanel = (
     <div style={{ flex: 1, background: flashId ? flashBg : C.bg, overflowY: 'auto', padding: phase === 'idle' || phase === 'briefing' ? 0 : '20px 24px', display: 'flex', flexDirection: 'column', transition: 'background 0.3s ease' }}>
 
-      {phase === 'idle' && (
+      {phase === 'idle' && !viewingFile && (
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', gap: 12 }}>
           <Play size={28} color={C.muted} />
           <p style={{ fontSize: 14, color: C.muted }}>Corre a analise para detectar problemas</p>
           <button onClick={runAnalysis} className="btn btn-primary">
             Run Analysis
           </button>
+        </div>
+      )}
+
+      {phase === 'idle' && viewingFile && (
+        <div style={{ display: 'flex', flexDirection: 'column', height: '100%', width: '100%' }}>
+          <div style={{ padding: '16px 24px', borderBottom: `1px solid ${C.border}`, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+             <span style={{ fontSize: 12, fontFamily: 'Geist Mono, monospace', color: C.text }}>{viewingFile}</span>
+             <button onClick={() => setViewingFile(null)} className="btn btn-ghost btn-sm">Close File</button>
+          </div>
+          <div style={{ flex: 1, overflowY: 'auto', padding: '24px', background: 'var(--card)' }}>
+            <pre style={{ fontSize: 12, fontFamily: 'Geist Mono, monospace', color: C.muted, margin: 0, whiteSpace: 'pre-wrap' }}>
+              {fileMap.get(viewingFile)}
+            </pre>
+          </div>
         </div>
       )}
 
@@ -761,7 +793,7 @@ const [explanationCache, setExplanationCache] = useState<Record<string, string>>
           ))}
 
           {currentHistory && (
-            <div style={{ marginTop: 16, background: 'var(--secondary)', border: '1px solid var(--border)', borderRadius: 6, padding: '10px 12px' }}>
+            <div style={{ marginTop: 16, background: 'var(--accent)', border: '1px solid var(--border)', borderRadius: 6, padding: '10px 12px' }}>
               <p style={{ fontSize: 11, color: 'var(--foreground)', fontWeight: 500, marginBottom: 2 }}>
                 {currentHistory.decision === 'rejected' ? '⚠ Rejeitaste isto antes' : '✓ Já aceitaste isto antes'}
               </p>
@@ -778,20 +810,20 @@ const [explanationCache, setExplanationCache] = useState<Record<string, string>>
           </button>
 
           <button onClick={handleReject}
-            style={{ width: '100%', height: 36, background: 'transparent', color: C.muted, border: `1px solid ${C.border}`, borderRadius: 6, fontSize: 13, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, marginBottom: 8, transition: 'all 0.12s ease' }}
+            style={{ width: '100%', height: 36, background: 'transparent', color: C.text, border: `1px solid ${C.border}`, borderRadius: 100, fontSize: 13, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, marginBottom: 8, transition: 'all 0.12s ease' }}
             onMouseEnter={e => { e.currentTarget.style.borderColor = C.red; e.currentTarget.style.color = C.red }}
-            onMouseLeave={e => { e.currentTarget.style.borderColor = C.border; e.currentTarget.style.color = C.muted }}>
+            onMouseLeave={e => { e.currentTarget.style.borderColor = C.border; e.currentTarget.style.color = C.text }}>
             <X size={14} /> Reject
           </button>
 
 
           <button onClick={() => setRefineOpen(o => !o)}
-            style={{ width: '100%', height: 36, background: 'transparent', color: refineOpen ? C.blue : C.muted, border: `1px solid ${refineOpen ? C.blue : C.border}`, borderRadius: 6, fontSize: 13, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, transition: 'all 0.12s ease' }}
+            style={{ width: '100%', height: 36, background: 'transparent', color: refineOpen ? C.blue : C.text, border: `1px solid ${refineOpen ? C.blue : C.border}`, borderRadius: 100, fontSize: 13, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, transition: 'all 0.12s ease' }}
             onMouseEnter={e => { e.currentTarget.style.borderColor = C.blue; e.currentTarget.style.color = C.blue }}
             onMouseLeave={e => {
               if (!refineOpen) {
                 e.currentTarget.style.borderColor = C.border
-                e.currentTarget.style.color = C.muted
+                e.currentTarget.style.color = C.text
               }
             }}>
             <Settings2 size={13} /> Refine

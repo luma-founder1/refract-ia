@@ -135,7 +135,7 @@ export const ReposPage: React.FC<{ onNavigate: (page: string, params?: any) => v
                 height: 52, 
                 padding: '0 16px', 
                 borderBottom: idx === filtered.length - 1 ? 'none' : '1px solid var(--border)',
-                background: hoveredRow === repo.id ? 'var(--secondary)' : 'transparent',
+                background: hoveredRow === repo.id ? 'var(--accent)' : 'transparent',
                 transition: 'background 0.1s ease'
               }}
             >

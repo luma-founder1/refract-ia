@@ -2,7 +2,7 @@ import React, { useState, useRef } from 'react'
 import { Upload, FolderOpen } from 'lucide-react'
 
 interface DropZoneProps {
-  onFiles: (files: FileList) => void
+  onFiles: (files: File[] | FileList) => void
 }
 
 export const DropZone: React.FC<DropZoneProps> = ({ onFiles }) => {
@@ -19,13 +19,55 @@ export const DropZone: React.FC<DropZoneProps> = ({ onFiles }) => {
     setIsDragging(false)
   }
 
-  const handleDrop = (e: React.DragEvent) => {
+  const handleDrop = async (e: React.DragEvent) => {
     e.preventDefault()
     setIsDragging(false)
     
-    const files = e.dataTransfer.files
-    if (files.length > 0) {
-      onFiles(files)
+    const items = e.dataTransfer.items;
+    if (!items || items.length === 0) {
+      const files = e.dataTransfer.files;
+      if (files.length > 0) onFiles(files);
+      return;
+    }
+
+    const filesArray: File[] = [];
+    
+    const readEntry = async (entry: any, path = '') => {
+      if (entry.isFile) {
+        return new Promise<void>((resolve) => {
+          entry.file((file: File) => {
+            Object.defineProperty(file, 'webkitRelativePath', {
+              value: path + file.name
+            });
+            filesArray.push(file);
+            resolve();
+          });
+        });
+      } else if (entry.isDirectory) {
+        const dirReader = entry.createReader();
+        const entries: any[] = await new Promise((resolve) => {
+          dirReader.readEntries((res: any[]) => resolve(res));
+        });
+        for (const subEntry of entries) {
+          await readEntry(subEntry, path + entry.name + '/');
+        }
+      }
+    };
+
+    const promises = [];
+    for (let i = 0; i < items.length; i++) {
+      const item = items[i];
+      if (item.kind === 'file') {
+        const entry = item.webkitGetAsEntry();
+        if (entry) promises.push(readEntry(entry));
+      }
+    }
+
+    await Promise.all(promises);
+    if (filesArray.length > 0) {
+      onFiles(filesArray);
+    } else if (e.dataTransfer.files.length > 0) {
+      onFiles(e.dataTransfer.files);
     }
   }
 
@@ -52,14 +94,14 @@ export const DropZone: React.FC<DropZoneProps> = ({ onFiles }) => {
         padding: '48px 32px',
         textAlign: 'center',
         cursor: 'pointer',
-        background: isDragging ? 'var(--secondary)' : 'var(--background)',
+        background: isDragging ? 'var(--accent)' : 'var(--background)',
         transition: 'all 0.2s ease',
       }}
     >
       <input
         ref={inputRef}
         type="file"
-        {...({ webkitdirectory: true } as any)}
+        {...({ webkitdirectory: "true", directory: "true" } as any)}
         style={{ display: 'none' }}
         onChange={handleFileChange}
       />

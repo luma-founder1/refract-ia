@@ -22,7 +22,7 @@ export const NewProjectModal: React.FC<Props> = ({ onClose, onProjectCreated }) 
   const [error, setError] = useState('');
   const { setFileMap } = useFiles();
 
-  const handleFolderUpload = async (files: FileList) => {
+  const handleFolderUpload = async (files: File[] | FileList) => {
     setLoading(true);
     setError('');
 
@@ -37,8 +37,8 @@ export const NewProjectModal: React.FC<Props> = ({ onClose, onProjectCreated }) 
       for (const file of fileArray) {
         const path = file.webkitRelativePath || file.name;
 
-        // Skip ignored paths
-        if (IGNORE_PATHS.some(ign => path.includes(ign))) continue;
+        const pathParts = path.split('/');
+        if (IGNORE_PATHS.some(ign => pathParts.includes(ign))) continue;
 
         // Only read relevant extensions
         const ext = '.' + path.split('.').pop()?.toLowerCase();
@@ -54,15 +54,28 @@ export const NewProjectModal: React.FC<Props> = ({ onClose, onProjectCreated }) 
 
       setFileMap(map);
 
-      // Create project in Supabase
-      const project = await createProject({
-        name: projectName,
-        path: 'uploaded', // Will be replaced with storage_id later
-        repo: null,
-        branch: 'main',
-        status: 'Not analysed',
-        last_run: null,
-      });
+      let project: Project;
+      try {
+        project = await createProject({
+          name: projectName,
+          path: 'uploaded', // Will be replaced with storage_id later
+          repo: null,
+          branch: 'main',
+          status: 'Not analysed',
+          last_run: null,
+        });
+      } catch (err) {
+        console.warn('Failed to create project in Supabase, using local fallback', err);
+        project = {
+          id: 'local-' + Date.now(),
+          name: projectName,
+          path: 'uploaded',
+          repo: null,
+          branch: 'main',
+          status: 'Not analysed',
+          last_run: null,
+        };
+      }
 
       onProjectCreated(project);
     } catch (err) {
@@ -135,7 +148,7 @@ export const NewProjectModal: React.FC<Props> = ({ onClose, onProjectCreated }) 
                 onClick={() => opt.key === 'repo' ? null : setSelected(opt.key)}
                 className="card"
                 style={{
-                  background: selected === opt.key ? 'var(--secondary)' : 'var(--background)',
+                  background: selected === opt.key ? 'var(--accent)' : 'var(--background)',
                   boxShadow: selected === opt.key ? '0 0 0 1px var(--ring)' : 'var(--shadow-border)',
                   padding: '24px', cursor: opt.key === 'repo' ? 'not-allowed' : 'pointer',
                   opacity: opt.key === 'repo' ? 0.5 : 1,

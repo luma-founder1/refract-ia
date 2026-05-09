@@ -1,37 +1,49 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700&display=swap');
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
-/* ─── Design Tokens ──────────────────────────────────────── */
+/* ─── Design Tokens (Framer) ────────────────────────────── */
 :root {
-  --background: #000000;
-  --foreground: #ffffff;
-  --card: #000000;
-  --card-foreground: #ffffff;
-  --popover: #000000;
-  --popover-foreground: #ffffff;
   --primary: #ffffff;
-  --primary-foreground: #000000;
-  --secondary: #111111;
-  --secondary-foreground: #ffffff;
-  --muted: #111111;
-  --muted-foreground: #888888;
-  --accent: #111111;
-  --accent-foreground: #ffffff;
-  --destructive: #ff5b4f;
-  --destructive-foreground: #ffffff;
-  --border: rgba(255, 255, 255, 0.14);
-  --input: rgba(255, 255, 255, 0.14);
-  --ring: #ffffff;
-  --radius: 0px;
-
-  /* Geist Specifics */
-  --font-sans: "Geist Sans", "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-  --font-mono: "Geist Mono", "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+  --on-primary: #000000;
+  --accent-blue: #0099ff;
+  --ink: #ffffff;
+  --ink-muted: #999999;
+  --canvas: #090909;
+  --surface-1: #141414;
+  --surface-2: #1c1c1c;
+  --hairline: #262626;
+  --hairline-soft: #1a1a1a;
+  --inverse-canvas: #ffffff;
+  --inverse-ink: #000000;
   
-  --shadow-border: 0 0 0 1px var(--border);
-  --shadow-border-hover: 0 0 0 1px rgba(255, 255, 255, 0.25);
-  --shadow-elevation: none;
+  --gradient-magenta: #d44df0;
+  --gradient-violet: #6a4cf5;
+  --gradient-orange: #ff7a3d;
+  --gradient-coral: #ff5577;
+  --semantic-success: #22c55e;
+
+  /* Tailwind mapping */
+  --background: var(--canvas);
+  --foreground: var(--ink);
+  --card: var(--surface-1);
+  --card-foreground: var(--ink);
+  --popover: var(--surface-1);
+  --popover-foreground: var(--ink);
+  --muted: var(--surface-1);
+  --muted-foreground: var(--ink-muted);
+  --accent: var(--surface-2);
+  --accent-foreground: var(--ink);
+  --border: var(--hairline);
+  --input: var(--surface-1);
+  --ring: var(--accent-blue);
+  --radius: 20px;
+
+  /* Fonts */
+  --font-display: "GT Walsheim Medium", "Inter", sans-serif;
+  --font-sans: "Inter", "Inter Variable", sans-serif;
 }
 
 @theme inline {
@@ -41,22 +53,14 @@
   --color-card-foreground: var(--card-foreground);
   --color-popover: var(--popover);
   --color-popover-foreground: var(--popover-foreground);
-  --color-primary: var(--primary);
-  --color-primary-foreground: var(--primary-foreground);
-  --color-secondary: var(--secondary);
-  --color-secondary-foreground: var(--secondary-foreground);
   --color-muted: var(--muted);
   --color-muted-foreground: var(--muted-foreground);
   --color-accent: var(--accent);
   --color-accent-foreground: var(--accent-foreground);
-  --color-destructive: var(--destructive);
-  --color-destructive-foreground: var(--destructive-foreground);
   --color-border: var(--border);
   --color-input: var(--input);
   --color-ring: var(--ring);
-  --color-radius: var(--radius);
   --font-sans: var(--font-sans);
-  --font-mono: var(--font-mono);
 }
 
 /* ─── Reset ──────────────────────────────────────────────── */
@@ -73,30 +77,28 @@ html, body, #root {
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
+  background: var(--canvas);
+  color: var(--ink);
   font-family: var(--font-sans);
-  font-size: 14px;
-  line-height: 1.6;
+  font-size: 15px;
+  line-height: 1.30;
+  letter-spacing: -0.15px;
+  font-feature-settings: "cv01", "cv05", "cv09", "cv11", "ss03", "ss07", "dlig";
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
 
 h1, h2, h3, h4, h5, h6, .display-text {
-  letter-spacing: -0.05em;
-  font-weight: 600;
+  font-family: var(--font-display);
+  font-weight: 500;
+  color: var(--ink);
 }
-
-h1 { letter-spacing: -0.07em; }
 
 /* ─── Scrollbar ───────────────────────────────────────────── */
 ::-webkit-scrollbar { width: 6px; height: 6px; }
 ::-webkit-scrollbar-track { background: transparent; }
-::-webkit-scrollbar-thumb { background: var(--border); }
-::-webkit-scrollbar-thumb:hover { background: var(--muted-foreground); }
-
-/* ─── Typography helpers ─────────────────────────────────── */
-.font-mono { font-family: var(--font-mono); }
+::-webkit-scrollbar-thumb { background: var(--hairline); border-radius: 999px; }
+::-webkit-scrollbar-thumb:hover { background: var(--ink-muted); }
 
 /* ─── Global transitions ─────────────────────────────────── */
 button, a, input, textarea {
@@ -113,60 +115,90 @@ button, a, input, textarea {
   cursor: pointer;
   white-space: nowrap;
   font-family: inherit;
-  font-size: 13px;
+  font-size: 14px;
   font-weight: 500;
-  height: 40px;
-  padding: 0 16px;
-  border-radius: var(--radius);
-  box-shadow: var(--shadow-border);
-  background: var(--background);
-  color: var(--foreground);
+  line-height: 1.0;
+  letter-spacing: -0.14px;
+  border-radius: 100px;
+  padding: 10px 15px;
   text-decoration: none;
 }
 
 .btn-primary {
   background: var(--primary);
-  color: var(--primary-foreground);
-  box-shadow: none;
+  color: var(--on-primary);
 }
 .btn-primary:hover {
-  background: var(--foreground);
-  opacity: 0.85;
+  transform: scale(0.97);
+}
+.btn-primary:active {
+  transform: scale(0.95);
 }
 
 .btn-secondary {
-  background: var(--secondary);
-  color: var(--secondary-foreground);
-  box-shadow: var(--shadow-border);
+  background: var(--surface-1);
+  color: var(--ink);
 }
 .btn-secondary:hover {
-  background: var(--background);
-  box-shadow: var(--shadow-border-hover);
+  background: var(--surface-2);
+}
+
+.btn-translucent {
+  background: var(--surface-2);
+  color: var(--ink);
+  border-radius: 30px;
+  padding: 8px 14px;
+}
+
+.btn-icon-circular {
+  background: var(--surface-1);
+  color: var(--ink);
+  border-radius: 9999px;
+  width: 40px;
+  height: 40px;
+  padding: 0;
 }
 
 .btn-ghost {
   background: transparent;
-  color: var(--muted-foreground);
-  box-shadow: none;
+  color: var(--ink-muted);
 }
 .btn-ghost:hover {
-  background: var(--accent);
-  color: var(--foreground);
-}
-
-.btn-danger {
-  background: transparent;
-  color: var(--destructive);
-}
-.btn-danger:hover {
-  background: var(--destructive);
-  color: var(--destructive-foreground);
+  background: var(--surface-1);
+  color: var(--ink);
 }
 
 .btn-sm {
-  height: 32px;
-  padding: 0 12px;
-  font-size: 12px;
+  padding: 8px 14px;
+  font-size: 13px;
+}
+
+/* ─── Cards ───────────────────────────────────────────────── */
+.card {
+  background: var(--surface-1);
+  color: var(--ink);
+  border-radius: 20px;
+  padding: 24px;
+}
+
+.card-featured {
+  background: var(--surface-2);
+  border-radius: 20px;
+  padding: 24px;
+}
+
+.gradient-spotlight-violet {
+  background: var(--gradient-violet);
+  color: var(--ink);
+  border-radius: 30px;
+  padding: 32px;
+}
+
+.gradient-spotlight-magenta {
+  background: var(--gradient-magenta);
+  color: var(--ink);
+  border-radius: 30px;
+  padding: 32px;
 }
 
 /* ─── Badges ──────────────────────────────────────────────── */
@@ -174,55 +206,54 @@ button, a, input, textarea {
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  font-size: 11px;
+  font-size: 13px;
   font-weight: 500;
-  border-radius: 9999px; /* Pill badges as requested in DESIGN.md */
+  letter-spacing: -0.13px;
+  border-radius: 100px;
   padding: 2px 10px;
-  box-shadow: var(--shadow-border);
 }
-.badge-high   { background: rgba(255, 91, 79, 0.1); color: #ff5b4f; }
-.badge-medium { background: rgba(10, 114, 239, 0.1); color: #0a72ef; }
-.badge-low    { background: var(--muted); color: var(--muted-foreground); }
-.badge-success{ background: rgba(0, 112, 243, 0.1); color: #0070f3; }
-
-/* ─── Cards ───────────────────────────────────────────────── */
-.card {
-  background: var(--card);
-  box-shadow: var(--shadow-border);
-  border-radius: var(--radius);
-  color: var(--card-foreground);
+.badge-muted {
+  background: var(--surface-2);
+  color: var(--ink-muted);
 }
-.card:hover {
-  box-shadow: var(--shadow-border-hover);
+.badge-success {
+  background: rgba(34, 197, 94, 0.1);
+  color: var(--semantic-success);
+}
+.badge-high {
+  background: rgba(255, 91, 79, 0.1);
+  color: #ff5b4f;
+}
+.badge-medium {
+  background: rgba(10, 114, 239, 0.1);
+  color: #0a72ef;
 }
 
 /* ─── Inputs ──────────────────────────────────────────────── */
 .input {
-  background: var(--background);
-  box-shadow: var(--shadow-border);
+  background: var(--surface-1);
   border: none;
-  border-radius: var(--radius);
+  border-radius: 10px;
   height: 40px;
-  padding: 0 12px;
-  font-size: 14px;
-  color: var(--foreground);
+  padding: 10px 14px;
+  font-size: 15px;
+  color: var(--ink);
   font-family: inherit;
   outline: none;
   width: 100%;
 }
 .input:focus { 
-  box-shadow: 0 0 0 1px var(--ring);
+  box-shadow: 0 0 0 1px rgba(0, 153, 255, 0.15);
 }
-.input::placeholder { color: var(--muted-foreground); }
+.input::placeholder { color: var(--ink-muted); }
 
 .textarea {
-  background: var(--background);
-  box-shadow: var(--shadow-border);
+  background: var(--surface-1);
   border: none;
-  border-radius: var(--radius);
+  border-radius: 10px;
   padding: 12px;
-  font-size: 14px;
-  color: var(--foreground);
+  font-size: 15px;
+  color: var(--ink);
   font-family: inherit;
   outline: none;
   width: 100%;
@@ -230,25 +261,26 @@ button, a, input, textarea {
   line-height: 1.6;
 }
 .textarea:focus { 
-  box-shadow: 0 0 0 1px var(--ring);
+  box-shadow: 0 0 0 1px rgba(0, 153, 255, 0.15);
 }
 
 /* ─── Section label ───────────────────────────────────────── */
 .section-label {
-  font-size: 11px;
+  font-size: 13px;
   font-weight: 500;
-  text-transform: uppercase;
-  letter-spacing: 0.1em;
-  color: var(--muted-foreground);
+  letter-spacing: -0.13px;
+  color: var(--ink-muted);
 }
 
 /* ─── Divider ─────────────────────────────────────────────── */
-.divider { border: none; height: 1px; background: var(--border); }
+.divider { border: none; height: 1px; background: var(--hairline); }
 
 /* ─── Page title ──────────────────────────────────────────── */
 .page-title {
-  font-size: 24px;
-  font-weight: 600;
-  letter-spacing: -0.06em;
-  color: var(--foreground);
+  font-size: 62px;
+  font-weight: 500;
+  line-height: 1.00;
+  letter-spacing: -3.1px;
+  color: var(--ink);
+  font-family: var(--font-display);
 }

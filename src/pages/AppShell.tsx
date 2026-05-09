@@ -5,6 +5,7 @@ import { ReposPage } from './ReposPage';
 import { GuidelinesPage } from './GuidelinesPage';
 import { SettingsPage } from './SettingsPage';
 import { ProjectView } from './projectView/ProjectView';
+import { Sidebar } from '../components/Sidebar';
 
 export type Page = 'home' | 'projects' | 'repos' | 'guidelines' | 'settings' | 'projectView' | 'reports' | 'chat' | 'deals' | 'accounts' | 'competitors' | 'feedback' | 'review';
 
@@ -44,6 +45,9 @@ export const AppShell: React.FC = () => {
 
   return (
     <div style={{ display: 'flex', height: '100vh', width: '100vw', overflow: 'hidden', background: 'var(--background)' }}>
+      {activePage !== 'projectView' && (
+        <Sidebar activePage={activePage} onNavigate={(p) => handleNavigate(p)} />
+      )}
       <main style={{ flex: 1, overflow: 'hidden', height: '100vh' }}>
         {renderPage()}
       </main>

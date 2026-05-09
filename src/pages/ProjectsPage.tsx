@@ -12,10 +12,10 @@ import { getAllProjects, deleteProject, getHealthSnapshots } from '../lib/db'
 // ─── Constants ────────────────────────────────────────────────────────────────
 
 const C = {
-  bg: 'var(--background)', surface: 'var(--card)', border: 'var(--border)',
-  text: 'var(--foreground)', muted: 'var(--muted-foreground)', subtle: '#222222',
-  blue: '#0a72ef', green: '#0070f3', red: '#ff5b4f',
-  yellow: '#0070f3', blueHover: '#0070f3',
+  bg: 'var(--canvas)', surface: 'var(--surface-1)', border: 'var(--hairline)',
+  text: 'var(--ink)', muted: 'var(--ink-muted)', subtle: 'var(--surface-2)',
+  blue: 'var(--accent-blue)', green: 'var(--semantic-success)', red: 'var(--gradient-coral)',
+  yellow: 'var(--gradient-orange)', blueHover: 'var(--accent-blue)',
 }
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -285,7 +285,7 @@ const ProjectCard: React.FC<{
       onMouseLeave={() => setHovered(false)}
       className="card"
       style={{
-        background: selected ? 'var(--secondary)' : 'var(--card)',
+        background: selected ? 'var(--accent)' : 'var(--card)',
         padding: '20px', cursor: 'pointer',
         boxShadow: selected ? '0 0 0 1px var(--ring)' : 'var(--shadow-border)',
         position: 'relative',

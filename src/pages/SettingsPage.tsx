@@ -4,9 +4,9 @@ import { Save, Trash2, Zap, FileText, Check } from 'lucide-react'
 // ─── Constants ────────────────────────────────────────────────────────────────
 
 const C = {
-  bg: '#0a0a0a', surface: '#111111', border: '#1a1a1a',
-  text: '#ffffff', muted: '#444444', subtle: '#222222',
-  blue: '#6366F1', green: '#4ade80', red: '#ef4444',
+  bg: 'var(--canvas)', surface: 'var(--surface-1)', border: 'var(--hairline)',
+  text: 'var(--ink)', muted: 'var(--ink-muted)', subtle: 'var(--surface-2)',
+  blue: 'var(--accent-blue)', green: 'var(--semantic-success)', red: 'var(--gradient-coral)',
 }
 
 // ─── Sub-components ───────────────────────────────────────────────────────────
@@ -174,14 +174,14 @@ export const SettingsPage: React.FC = () => {
         {/* ── Danger zone ─────────────────────────────────────────────────── */}
         <section>
           <SectionLabel>Danger zone</SectionLabel>
-          <div style={{ background: C.surface, border: `1px solid #2a1a1a`, borderRadius: 8, padding: '4px 20px' }}>
+          <div style={{ background: C.surface, border: `1px solid var(--hairline)`, borderRadius: 8, padding: '4px 20px' }}>
             <Row label="Clear local data" desc="Remove todos os projetos e histórico guardados localmente." last>
               <button
                 onClick={handleClearData}
                 style={{
                   height: 30, padding: '0 14px', flexShrink: 0,
                   background: confirmDelete ? C.red : 'transparent',
-                  border: `1px solid ${confirmDelete ? C.red : '#2a1a1a'}`,
+                  border: `1px solid ${confirmDelete ? C.red : 'var(--hairline)'}`,
                   borderRadius: 5, fontSize: 11, fontWeight: 500,
                   color: confirmDelete ? '#fff' : C.red,
                   cursor: 'pointer', transition: 'all 0.12s ease',
