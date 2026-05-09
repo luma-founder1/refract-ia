@@ -1,9 +1,7 @@
 import { createClient } from '@supabase/supabase-js'
 import Anthropic from '@anthropic-ai/sdk'
 
-const anthropic = new Anthropic({
-  apiKey: process.env.ANTHROPIC_API_KEY || '',
-})
+const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY || '' })
 
 const supabase = createClient(
   process.env.VITE_SUPABASE_URL || '',
@@ -53,15 +51,15 @@ ${topIssues}
 ${guidelines ? `\nGuidelines:\n${guidelines}` : ''}`
 
   try {
-    const response = await anthropic.messages.create({
+    const msg = await anthropic.messages.create({
       model: 'claude-sonnet-4-20250514',
       max_tokens: 256,
       system: systemPrompt,
       messages: [{ role: 'user', content: userPrompt }],
+      temperature: 0.2,
     })
 
-    const content = response.content[0]
-    const briefing = content.type === 'text' ? content.text : ''
+    const briefing = (msg.content[0] as any)?.text ?? ''
     return res.status(200).json({ briefing })
   } catch (err: any) {
     console.error('Briefing error:', err)

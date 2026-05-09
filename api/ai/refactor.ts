@@ -1,9 +1,7 @@
 import { createClient } from '@supabase/supabase-js'
 import Anthropic from '@anthropic-ai/sdk'
 
-const anthropic = new Anthropic({
-  apiKey: process.env.ANTHROPIC_API_KEY || '',
-})
+const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY || '' })
 
 const supabase = createClient(
   process.env.VITE_SUPABASE_URL || '',
@@ -40,21 +38,19 @@ ${instruction ? `\nInstrução adicional: ${instruction}` : ''}
 ${guidelines ? `\nGuidelines:\n${guidelines}` : ''}`
 
   try {
-    const response = await anthropic.messages.create({
+    const msg = await anthropic.messages.create({
       model: 'claude-sonnet-4-20250514',
       max_tokens: 1024,
       system: systemPrompt,
       messages: [{ role: 'user', content: userPrompt }],
+      temperature: 0.2,
     })
 
-    const content = response.content[0]
-    const text = content.type === 'text' ? content.text : '{}'
+    const text = (msg.content[0] as any)?.text ?? '{}'
 
-    // Extract JSON from response
     let patch: { before: string; after: string }
     try {
-      const jsonMatch = text.match(/\{[\s\S]*\}/)
-      patch = jsonMatch ? JSON.parse(jsonMatch[0]) : JSON.parse(text)
+      patch = JSON.parse(text)
     } catch {
       patch = { before: issue.lines.before?.join('\n') || '', after: text }
     }
