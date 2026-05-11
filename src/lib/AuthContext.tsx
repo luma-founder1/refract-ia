@@ -10,6 +10,9 @@ interface AuthContextValue {
   loading: boolean
   refreshProfile: () => Promise<void>
   signOut: () => Promise<void>
+  signIn: (email: string, password: string) => Promise<{ error: Error | null }>
+  signUp: (email: string, password: string) => Promise<{ error: Error | null }>
+  signUpWithGitHub: () => Promise<{ error: Error | null }>
 }
 
 // ─── Context ──────────────────────────────────────────────────────────────────
@@ -20,6 +23,9 @@ const AuthContext = createContext<AuthContextValue>({
   loading: true,
   refreshProfile: async () => {},
   signOut: async () => {},
+  signIn: async () => ({ error: null }),
+  signUp: async () => ({ error: null }),
+  signUpWithGitHub: async () => ({ error: null }),
 })
 
 export const useAuth = () => useContext(AuthContext)
@@ -59,6 +65,63 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setProfile(null)
   }, [])
 
+  const signIn = useCallback(async (email: string, password: string) => {
+    try {
+      const { error } = await supabase.auth.signInWithPassword({ email, password })
+      if (error) return { error }
+      return { error: null }
+    } catch (err) {
+      return { error: err instanceof Error ? err : new Error('Sign in failed') }
+    }
+  }, [])
+
+  const signUp = useCallback(async (email: string, password: string) => {
+    try {
+      // Sign up with Supabase Auth
+      const { data, error: signUpError } = await supabase.auth.signUp({ email, password })
+      if (signUpError) return { error: signUpError }
+
+      const user = data.user
+      if (!user) return { error: new Error('No user returned from signup') }
+
+      // Create user profile record
+      const { error: profileError } = await supabase.from('users').insert({
+        id: user.id,
+        auth_id: user.id,
+        name: email.split('@')[0],
+        email,
+        plan: 'free',
+        onboarding_completed: false,
+        language: 'pt',
+        avatar_url: null,
+      })
+
+      if (profileError) {
+        console.warn('[auth] failed to create user profile:', profileError.message)
+        // Don't fail the signup, just warn
+      }
+
+      return { error: null }
+    } catch (err) {
+      return { error: err instanceof Error ? err : new Error('Sign up failed') }
+    }
+  }, [])
+
+  const signUpWithGitHub = useCallback(async () => {
+    try {
+      const { error } = await supabase.auth.signInWithOAuth({
+        provider: 'github',
+        options: {
+          redirectTo: `${window.location.origin}/auth/callback`,
+        },
+      })
+      if (error) return { error }
+      return { error: null }
+    } catch (err) {
+      return { error: err instanceof Error ? err : new Error('GitHub sign up failed') }
+    }
+  }, [])
+
   // ── Bootstrap: get existing session on mount ──
   useEffect(() => {
     supabase.auth.getSession().then(async ({ data }) => {
@@ -87,7 +150,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   }, [fetchProfile])
 
   return (
-    <AuthContext.Provider value={{ session, profile, loading, refreshProfile, signOut }}>
+    <AuthContext.Provider value={{ session, profile, loading, refreshProfile, signOut, signIn, signUp, signUpWithGitHub }}>
       {children}
     </AuthContext.Provider>
   )

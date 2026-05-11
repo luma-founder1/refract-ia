@@ -36,10 +36,14 @@ export async function getProject(id: string): Promise<Project | null> {
 }
 
 export async function createProject(project: Omit<Project, 'id' | 'created_at'>): Promise<Project> {
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) throw new Error('Not authenticated')
+
   const { data, error } = await supabase
     .from('projects')
     .insert({
       ...project,
+      user_id: user.id,
       created_at: new Date().toISOString(),
     })
     .select()
@@ -84,6 +88,9 @@ export async function getActivity(limit = 8): Promise<Activity[]> {
 }
 
 export async function createActivity(activity: Omit<Activity, 'id' | 'created_at'>): Promise<Activity> {
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) throw new Error('Not authenticated')
+
   const { data, error } = await supabase
     .from('activity')
     .insert({

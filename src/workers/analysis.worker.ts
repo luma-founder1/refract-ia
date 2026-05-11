@@ -1,6 +1,5 @@
 // src/workers/analysis.worker.ts
-import { parse } from '@typescript-eslint/parser'
-import { AST_NODE_TYPES } from '@typescript-eslint/types'
+import { Project, Node, SyntaxKind, ts, SourceFile } from 'ts-morph'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -75,61 +74,61 @@ function getLines(source: string): string[] {
   return source.split('\n')
 }
 
-function parseAst(source: string, filePath: string) {
-  try {
-    return parse(source, { jsx: true, loc: true, range: true, tolerant: true, filePath })
-  } catch {
-    return null
-  }
-}
-
-// ─── AST walker ───────────────────────────────────────────────────────────────
-
-function walk(node: any, visitor: (node: any) => void) {
-  if (!node || typeof node !== 'object') return
-  visitor(node)
-  for (const key of Object.keys(node)) {
-    const child = node[key]
-    if (Array.isArray(child)) child.forEach((c: any) => walk(c, visitor))
-    else if (child && typeof child === 'object' && child.type) walk(child, visitor)
-  }
-}
-
 function makePatch(before: string[], after: string[]): { before: string; after: string } {
   return { before: before.join('\n'), after: after.join('\n') }
 }
 
+// Create an in-memory ts-morph Project from provided files
+function createTsMorphProject(files: Map<string, string>): Project {
+  const project = new Project({
+    useInMemoryFileSystem: true,
+    compilerOptions: {
+      target: ts.ScriptTarget.ESNext,
+      module: ts.ModuleKind.ESNext,
+      jsx: ts.JsxEmit.ReactJSX,
+      strict: true,
+      allowJs: true,
+    },
+  })
+
+  for (const [filePath, content] of files) {
+    if (/\.(ts|tsx|js|jsx)$/.test(filePath)) {
+      project.createSourceFile(filePath, content, { overwrite: true })
+    }
+  }
+
+  return project
+}
+
 // ─── Detector: Any Types ──────────────────────────────────────────────────────
 
-function detectAnyTypes(filePath: string, source: string, lines: string[]): Issue[] {
-  const ast = parseAst(source, filePath)
-  if (!ast) return []
+function detectAnyTypes(sourceFile: SourceFile): Issue[] {
   const issues: Issue[] = []
+  const text = sourceFile.getFullText()
+  const lines = getLines(text)
 
-  walk(ast, (node) => {
-    if (node.type === AST_NODE_TYPES.TSAnyKeyword && node.loc) {
-      const line = node.loc.start.line
-      const context = lines[line - 1] ?? ''
-      const fixed = context
-        .replace(/:\s*any\b/g, ': unknown')
-        .replace(/as\s+any\b/g, 'as unknown')
-        .replace(/<any>/g, '<unknown>')
-        .replace(/Array<any>/g, 'Array<unknown>')
-        .replace(/any\[\]/g, 'unknown[]')
+  sourceFile.getDescendantsOfKind(SyntaxKind.AnyKeyword).forEach(node => {
+    const line = node.getStartLineNumber()
+    const lineText = lines[line - 1] ?? ''
+    const fixed = lineText
+      .replace(/:\s*any\b/g, ': unknown')
+      .replace(/as\s+any\b/g, 'as unknown')
+      .replace(/<any>/g, '<unknown>')
+      .replace(/Array<any>/g, 'Array<unknown>')
+      .replace(/any\[\]/g, 'unknown[]')
 
-      issues.push({
-        id: `any-${filePath}-${line}-${node.loc.start.column}`,
-        file: filePath.split('/').pop() || filePath,
-        filePath,
-        category: 'any-type',
-        problem: `Uso de \`any\` — substitui por um tipo concreto`,
-        impact: 'Medium',
-        lineStart: line,
-        lineEnd: line,
-        lines: { before: [context], after: [fixed] },
-        patch: makePatch([context], [fixed]),
-      })
-    }
+    issues.push({
+      id: `any-${sourceFile.getFilePath()}-${line}`,
+      file: sourceFile.getBaseName(),
+      filePath: sourceFile.getFilePath(),
+      category: 'any-type',
+      problem: 'Uso de `any` — substitui por um tipo concreto',
+      impact: 'Medium',
+      lineStart: line,
+      lineEnd: line,
+      lines: { before: [lineText], after: [fixed] },
+      patch: { before: lineText, after: fixed },
+    })
   })
 
   return issues
@@ -137,151 +136,119 @@ function detectAnyTypes(filePath: string, source: string, lines: string[]): Issu
 
 // ─── Detector: Dead useState ──────────────────────────────────────────────────
 
-function detectDeadState(filePath: string, source: string, lines: string[]): Issue | null {
-  const ast = parseAst(source, filePath)
-  if (!ast) return null
+function detectDeadState(sourceFile: SourceFile): Issue | null {
+  const calls = sourceFile.getDescendantsOfKind(SyntaxKind.CallExpression)
+    .filter(c => c.getExpression().getText() === 'useState')
 
-  const stateDecls: Array<{ varName: string; setterName: string; line: number }> = []
+  const stateDecls: Array<{ varName: string; line: number }> = []
 
-  walk(ast, (node) => {
-    if (
-      node.type === AST_NODE_TYPES.VariableDeclarator &&
-      node.id?.type === AST_NODE_TYPES.ArrayPattern &&
-      node.init?.type === AST_NODE_TYPES.CallExpression &&
-      node.init?.callee?.name === 'useState' &&
-      node.loc
-    ) {
-      const elements = node.id.elements
-      if (elements.length >= 1 && elements[0]?.name) {
-        stateDecls.push({
-          varName: elements[0].name,
-          setterName: elements[1]?.name ?? '',
-          line: node.loc.start.line,
-        })
-      }
-    }
-  })
+  for (const call of calls) {
+    const varDecl = call.getFirstAncestorByKind(SyntaxKind.VariableDeclaration)
+    if (!varDecl) continue
+    const nameNode = varDecl.getNameNode()
+    if (!Node.isArrayBindingPattern(nameNode)) continue
+    const first = (nameNode as any).getElements?.()[0]
+    const varName = first?.getText?.() ?? ''
+    if (!varName) continue
+    stateDecls.push({ varName, line: varDecl.getStartLineNumber() })
+  }
 
   if (stateDecls.length === 0) return null
 
-  const dead = stateDecls.filter(({ varName, line }) => {
-    const sourceWithoutDecl = lines.filter((_, i) => i !== line - 1).join('\n')
-    return !new RegExp(`\\b${varName}\\b`).test(sourceWithoutDecl)
+  const dead = stateDecls.filter(({ varName }) => {
+    const refs = sourceFile.getDescendantsOfKind(SyntaxKind.Identifier).filter(id => id.getText() === varName)
+    return refs.length <= 1
   })
 
   if (dead.length === 0) return null
 
+  const lines = getLines(sourceFile.getFullText())
   const deadLines = dead.map(d => lines[d.line - 1] ?? '')
 
   return {
-    id: `dead-state-${filePath}`,
-    file: filePath.split('/').pop() || filePath,
-    filePath,
+    id: `dead-state-${sourceFile.getFilePath()}`,
+    file: sourceFile.getBaseName(),
+    filePath: sourceFile.getFilePath(),
     category: 'dead-state',
-    problem: `${dead.length} estado${dead.length !== 1 ? 's' : ''} não usado${dead.length !== 1 ? 's' : ''}: ${dead.map(d => d.varName).join(', ')}`,
+    problem: `${dead.length} estado(s) não usado(s): ${dead.map(d => d.varName).join(', ')}`,
     impact: 'Medium',
     lineStart: dead[0].line,
     lineEnd: dead[dead.length - 1].line,
     lines: { before: deadLines, after: [] },
-    patch: makePatch(deadLines, []),
+    patch: { before: deadLines.join('\n'), after: '' },
   }
 }
 
 // ─── Detector: Missing JSDoc ──────────────────────────────────────────────────
 
-function detectMissingDocs(filePath: string, source: string, lines: string[]): Issue[] {
-  const ast = parseAst(source, filePath)
-  if (!ast) return []
+function detectMissingDocs(sourceFile: SourceFile): Issue[] {
   const issues: Issue[] = []
-  const comments = ast.comments ?? []
+  const exported = sourceFile.getExportedDeclarations()
+  const full = sourceFile.getFullText()
+  const lines = getLines(full)
 
-  const hasJsDocAbove = (targetLine: number): boolean =>
-    comments.some((c: any) =>
-      c.type === 'Block' && c.value.startsWith('*') &&
-      c.loc && c.loc.end.line === targetLine - 1
-    )
+  for (const [name, decls] of exported) {
+    for (const decl of decls) {
+      // Many declaration nodes expose getJsDocs()
+      const hasJs = (decl as any).getJsDocs?.()?.length > 0
+      if (hasJs) continue
 
-  walk(ast, (node) => {
-    if (!node.loc) return
-    const line = node.loc.start.line
-    const isExported =
-      node.type === AST_NODE_TYPES.ExportNamedDeclaration ||
-      node.type === AST_NODE_TYPES.ExportDefaultDeclaration
-    if (!isExported) return
+      let line = 1
+      try { line = decl.getStartLineNumber() } catch { line = 1 }
+      const code = lines[line - 1] ?? ''
 
-    const decl = node.declaration
-    if (!decl) return
-
-    let name = ''
-    if (decl.type === AST_NODE_TYPES.FunctionDeclaration && decl.id) name = decl.id.name
-    else if (decl.type === AST_NODE_TYPES.ClassDeclaration && decl.id) name = decl.id.name
-    else if (decl.type === AST_NODE_TYPES.VariableDeclaration) {
-      const v = decl.declarations[0]
-      if (v?.id?.name) name = v.id.name
+      issues.push({
+        id: `docs-${sourceFile.getFilePath()}-${line}`,
+        file: sourceFile.getBaseName(),
+        filePath: sourceFile.getFilePath(),
+        category: 'missing-docs',
+        problem: `Export \`${name}\` sem JSDoc`,
+        impact: 'Low',
+        lineStart: line,
+        lineEnd: line,
+        lines: { before: [code], after: [`/**`, ` * ${name} — descrição aqui`, ` */`, code] },
+        patch: { before: code, after: `/**\n * ${name} — descrição aqui\n */\n${code}` },
+      })
     }
-
-    if (!name || hasJsDocAbove(line)) return
-
-    const code = lines[line - 1] ?? ''
-    const afterLines = [`/**`, ` * ${name} — adiciona descrição aqui`, ` */`, code]
-
-    issues.push({
-      id: `docs-${filePath}-${line}`,
-      file: filePath.split('/').pop() || filePath,
-      filePath,
-      category: 'missing-docs',
-      problem: `Export \`${name}\` sem JSDoc`,
-      impact: 'Low',
-      lineStart: line,
-      lineEnd: line,
-      lines: { before: [code], after: afterLines },
-      patch: makePatch([code], afterLines),
-    })
-  })
+  }
 
   return issues
 }
 
 // ─── Detector: Oversized Component ───────────────────────────────────────────
 
-function detectOversized(filePath: string, source: string, lines: string[]): Issue | null {
-  if (!/\.(tsx|jsx)$/.test(filePath)) return null
-  const ast = parseAst(source, filePath)
-  if (!ast) return null
+function detectOversized(sourceFile: SourceFile): Issue | null {
+  const path = sourceFile.getFilePath()
+  if (!/\.(tsx|jsx)$/.test(path)) return null
 
-  const large: Array<{ name: string; lineStart: number; lineEnd: number; size: number }> = []
+  const full = sourceFile.getFullText()
+  const lines = getLines(full)
 
-  walk(ast, (node) => {
-    const isFn =
-      node.type === AST_NODE_TYPES.FunctionDeclaration ||
-      node.type === AST_NODE_TYPES.ArrowFunctionExpression ||
-      node.type === AST_NODE_TYPES.FunctionExpression
-    if (!isFn || !node.loc) return
+  const fnNodes = [
+    ...sourceFile.getDescendantsOfKind(SyntaxKind.FunctionDeclaration),
+    ...sourceFile.getDescendantsOfKind(SyntaxKind.ArrowFunction),
+    ...sourceFile.getDescendantsOfKind(SyntaxKind.FunctionExpression),
+  ]
 
-    const size = node.loc.end.line - node.loc.start.line
-    if (size < 80) return
+  const large: Array<{ name: string; start: number; end: number; size: number }> = []
 
-    let hasJsx = false
-    walk(node, (child) => {
-      if (child.type === AST_NODE_TYPES.JSXElement || child.type === AST_NODE_TYPES.JSXFragment)
-        hasJsx = true
-    })
-    if (!hasJsx) return
-
+  for (const fn of fnNodes) {
+    const size = fn.getEndLineNumber() - fn.getStartLineNumber()
+    if (size < 80) continue
+    const hasJsx = fn.getDescendantsOfKind(SyntaxKind.JsxElement).length > 0 || fn.getDescendantsOfKind(SyntaxKind.JsxFragment).length > 0 || fn.getDescendantsOfKind(SyntaxKind.JsxSelfClosingElement).length > 0
+    if (!hasJsx) continue
     let name = 'Component'
-    if (node.id?.name) name = node.id.name
-    else if (node.parent?.id?.name) name = node.parent.id.name
-
-    large.push({ name, lineStart: node.loc.start.line, lineEnd: node.loc.end.line, size })
-  })
+    try { name = (fn as any).getName?.() ?? name } catch {}
+    large.push({ name, start: fn.getStartLineNumber(), end: fn.getEndLineNumber(), size })
+  }
 
   if (large.length === 0) {
     if (lines.length < 200) return null
     const preview = lines.slice(0, 12)
     return {
-      id: `oversized-${filePath}`,
-      file: filePath.split('/').pop() || filePath,
-      filePath,
+      id: `oversized-${path}`,
+      file: sourceFile.getBaseName(),
+      filePath: path,
       category: 'oversized-component',
       problem: `Ficheiro com ${lines.length} linhas — considera dividir em módulos`,
       impact: lines.length > 300 ? 'High' : 'Medium',
@@ -293,17 +260,16 @@ function detectOversized(filePath: string, source: string, lines: string[]): Iss
   }
 
   const worst = large.sort((a, b) => b.size - a.size)[0]
-  const contextLines = lines.slice(worst.lineStart - 1, worst.lineStart + 10)
-
+  const contextLines = lines.slice(worst.start - 1, Math.min(lines.length, worst.start + 10))
   return {
-    id: `oversized-${filePath}`,
-    file: filePath.split('/').pop() || filePath,
-    filePath,
+    id: `oversized-${path}`,
+    file: sourceFile.getBaseName(),
+    filePath: path,
     category: 'oversized-component',
     problem: `${worst.name} tem ${worst.size} linhas — divide em sub-componentes`,
     impact: worst.size > 200 ? 'High' : 'Medium',
-    lineStart: worst.lineStart,
-    lineEnd: worst.lineEnd,
+    lineStart: worst.start,
+    lineEnd: worst.end,
     lines: { before: contextLines, after: [] },
     patch: { before: '', after: '' },
   }
@@ -311,65 +277,56 @@ function detectOversized(filePath: string, source: string, lines: string[]): Iss
 
 // ─── Detector: Console.log esquecido ─────────────────────────────────────────
 
-function detectConsoleLogs(filePath: string, source: string, lines: string[]): Issue[] {
-  const ast = parseAst(source, filePath)
-  if (!ast) return []
+function detectConsoleLogs(sourceFile: SourceFile): Issue[] {
   const issues: Issue[] = []
+  const lines = getLines(sourceFile.getFullText())
 
-  walk(ast, (node) => {
-    if (
-      node.type === AST_NODE_TYPES.CallExpression &&
-      node.callee?.type === AST_NODE_TYPES.MemberExpression &&
-      node.callee.object?.name === 'console' &&
-      ['log', 'warn', 'debug', 'info'].includes(node.callee.property?.name) &&
-      node.loc
-    ) {
-      const line = node.loc.start.line
-      const context = lines[line - 1] ?? ''
-
+  for (const call of sourceFile.getDescendantsOfKind(SyntaxKind.CallExpression)) {
+    const expr = call.getExpression()
+    if (!Node.isPropertyAccessExpression(expr)) continue
+    const obj = expr.getExpression().getText()
+    const name = expr.getName()
+    if (obj === 'console' && ['log', 'warn', 'debug', 'info'].includes(name)) {
+      const line = call.getStartLineNumber()
+      const lineText = lines[line - 1] ?? ''
       issues.push({
-        id: `console-${filePath}-${line}`,
-        file: filePath.split('/').pop() || filePath,
-        filePath,
+        id: `console-${sourceFile.getFilePath()}-${line}`,
+        file: sourceFile.getBaseName(),
+        filePath: sourceFile.getFilePath(),
         category: 'console-log',
-        problem: `\`console.${node.callee.property.name}\` esquecido — remove antes de produção`,
+        problem: `\`console.${name}\` esquecido — remove antes de produção`,
         impact: 'Low',
         lineStart: line,
         lineEnd: line,
-        lines: { before: [context], after: [] },
-        patch: makePatch([context], []),
+        lines: { before: [lineText], after: [] },
+        patch: { before: lineText, after: '' },
       })
     }
-  })
+  }
 
   return issues
 }
 
 // ─── Detector: useEffect sem dependency array ─────────────────────────────────
 
-function detectEffectNoDeps(filePath: string, source: string, lines: string[]): Issue[] {
-  if (!/\.(tsx?|jsx?)$/.test(filePath)) return []
-  const ast = parseAst(source, filePath)
-  if (!ast) return []
+function detectEffectNoDeps(sourceFile: SourceFile): Issue[] {
+  const path = sourceFile.getFilePath()
+  if (!/\.(tsx?|jsx?)$/.test(path)) return []
   const issues: Issue[] = []
+  const lines = getLines(sourceFile.getFullText())
 
-  walk(ast, (node) => {
-    if (
-      node.type === AST_NODE_TYPES.CallExpression &&
-      node.callee?.name === 'useEffect' &&
-      node.arguments?.length === 1 &&
-      node.loc
-    ) {
-      const line = node.loc.start.line
-      const endLine = node.loc.end.line
+  for (const call of sourceFile.getDescendantsOfKind(SyntaxKind.CallExpression)) {
+    const expr = call.getExpression()
+    if (expr.getText() === 'useEffect' && call.getArguments().length === 1) {
+      const line = call.getStartLineNumber()
+      const endLine = call.getEndLineNumber()
       const context = lines[line - 1] ?? ''
-
       issues.push({
-        id: `effect-no-deps-${filePath}-${line}`,
-        file: filePath.split('/').pop() || filePath,
-        filePath,
+        id: `effect-no-deps-${path}-${line}`,
+        file: sourceFile.getBaseName(),
+        filePath: path,
         category: 'effect-no-deps',
-        problem: `useEffect sem dependency array — corre em cada render e causa loops`,
+        problem: 'useEffect sem dependency array — corre em cada render e causa loops',
         impact: 'High',
         lineStart: line,
         lineEnd: endLine,
@@ -377,219 +334,164 @@ function detectEffectNoDeps(filePath: string, source: string, lines: string[]): 
         patch: { before: '', after: '' },
       })
     }
-  })
+  }
 
   return issues
 }
 
 // ─── Detector: Nomenclatura genérica ─────────────────────────────────────────
 
-function detectGenericNaming(filePath: string, source: string, lines: string[]): Issue[] {
-  const ast = parseAst(source, filePath)
-  if (!ast) return []
+function detectGenericNaming(sourceFile: SourceFile): Issue[] {
   const issues: Issue[] = []
   const seen = new Set<string>()
+  const lines = getLines(sourceFile.getFullText())
 
-  walk(ast, (node) => {
-    // Variáveis com nomes genéricos
-    if (
-      node.type === AST_NODE_TYPES.VariableDeclarator &&
-      node.id?.type === AST_NODE_TYPES.Identifier &&
-      node.loc
-    ) {
-      const name: string = node.id.name
-      if (!GENERIC_NAMES.has(name)) return
-      const key = `${name}-${node.loc.start.line}`
-      if (seen.has(key)) return
+  for (const v of sourceFile.getDescendantsOfKind(SyntaxKind.VariableDeclaration)) {
+    const name = v.getName()
+    if (GENERIC_NAMES.has(name)) {
+      const line = v.getStartLineNumber()
+      const key = `${name}-${line}`
+      if (seen.has(key)) continue
       seen.add(key)
-
-      const line = node.loc.start.line
-      const context = lines[line - 1] ?? ''
-
       issues.push({
-        id: `naming-${filePath}-${line}-${name}`,
-        file: filePath.split('/').pop() || filePath,
-        filePath,
+        id: `naming-${sourceFile.getFilePath()}-${line}-${name}`,
+        file: sourceFile.getBaseName(),
+        filePath: sourceFile.getFilePath(),
         category: 'generic-naming',
         problem: `Nome genérico \`${name}\` — usa um nome que descreva o propósito`,
         impact: 'Low',
         lineStart: line,
         lineEnd: line,
-        lines: { before: [context], after: [] },
-        patch: { before: '', after: '' },
+        lines: { before: [lines[line - 1] ?? ''], after: [] },
       })
     }
+  }
 
-    // Props desestruturadas com nomes genéricos
-    if (
-      (node.type === AST_NODE_TYPES.FunctionDeclaration ||
-       node.type === AST_NODE_TYPES.ArrowFunctionExpression) &&
-      node.params?.length > 0 &&
-      node.loc
-    ) {
-      for (const param of node.params) {
-        if (param.type !== AST_NODE_TYPES.ObjectPattern) continue
-        for (const prop of param.properties ?? []) {
-          if (
-            prop.type === AST_NODE_TYPES.Property &&
-            prop.key?.type === AST_NODE_TYPES.Identifier
-          ) {
-            const propName: string = prop.key.name
-            if (!GENERIC_NAMES.has(propName)) continue
-            const line = prop.loc?.start.line ?? node.loc!.start.line
-            const key = `prop-${propName}-${line}`
-            if (seen.has(key)) continue
-            seen.add(key)
-
-            const context = lines[line - 1] ?? ''
-            issues.push({
-              id: `naming-prop-${filePath}-${line}-${propName}`,
-              file: filePath.split('/').pop() || filePath,
-              filePath,
-              category: 'generic-naming',
-              problem: `Prop genérica \`${propName}\` — renomeia para descrever o dado`,
-              impact: 'Low',
-              lineStart: line,
-              lineEnd: line,
-              lines: { before: [context], after: [] },
-              patch: { before: '', after: '' },
-            })
-          }
-        }
-      }
+  // Props destructuring
+  for (const objPat of sourceFile.getDescendantsOfKind(SyntaxKind.ObjectBindingPattern)) {
+    for (const elem of (objPat as any).getElements?.() ?? []) {
+      const name = elem.getName?.() ?? elem.getText()
+      if (!GENERIC_NAMES.has(name)) continue
+      const line = elem.getStartLineNumber()
+      const key = `prop-${name}-${line}`
+      if (seen.has(key)) continue
+      seen.add(key)
+      issues.push({
+        id: `naming-prop-${sourceFile.getFilePath()}-${line}-${name}`,
+        file: sourceFile.getBaseName(),
+        filePath: sourceFile.getFilePath(),
+        category: 'generic-naming',
+        problem: `Prop genérica \`${name}\` — renomeia para descrever o dado`,
+        impact: 'Low',
+        lineStart: line,
+        lineEnd: line,
+        lines: { before: [lines[line - 1] ?? ''], after: [] },
+      })
     }
-  })
+  }
 
   return issues
 }
 
 // ─── Detector: Prop drilling ────────────────────────────────────────────────
 
-function detectPropDrilling(filePath: string, source: string, lines: string[]): Issue[] {
-  const ast = parseAst(source, filePath)
-  if (!ast) return []
-
+function detectPropDrilling(sourceFile: SourceFile): Issue[] {
   const issues: Issue[] = []
   const reported = new Set<string>()
+  const lines = getLines(sourceFile.getFullText())
 
-  const inspect = (componentName: string, fnNode: any) => {
-    if (!fnNode?.loc || !/^[A-Z]/.test(componentName)) return
+  const candidates = [
+    ...sourceFile.getDescendantsOfKind(SyntaxKind.FunctionDeclaration),
+    ...sourceFile.getDescendantsOfKind(SyntaxKind.VariableDeclaration),
+  ]
 
-    let hasJsx = false
-    walk(fnNode, (child) => {
-      if (child.type === AST_NODE_TYPES.JSXElement || child.type === AST_NODE_TYPES.JSXFragment) {
-        hasJsx = true
+  for (const node of candidates) {
+    let name = ''
+    let fnNode: any = null
+
+    if (Node.isFunctionDeclaration(node) && node.getName && node.getName()) {
+      name = node.getName()!
+      fnNode = node
+    } else if (Node.isVariableDeclaration(node)) {
+      const init = node.getInitializer()
+      if (init && (Node.isArrowFunction(init) || Node.isFunctionExpression(init))) {
+        name = node.getName()
+        fnNode = init
       }
-    })
-    if (!hasJsx) return
+    }
 
-    const param = fnNode.params?.[0]
-    if (!param) return
+    if (!fnNode || !/^[A-Z]/.test(name)) continue
+
+    const hasJsx = fnNode.getDescendantsOfKind(SyntaxKind.JsxElement).length > 0 || fnNode.getDescendantsOfKind(SyntaxKind.JsxFragment).length > 0
+    if (!hasJsx) continue
+
+    const param = fnNode.getParameters?.()?.[0]
+    if (!param) continue
 
     let propCount = 0
     let forwardsProps = false
 
-    if (param.type === AST_NODE_TYPES.Identifier) {
-      const propSource = param.name
+    if (Node.isIdentifier(param.getNameNode?.())) {
+      const propSource = param.getName()
       const uniqueProps = new Set<string>()
-
-      walk(fnNode, (child) => {
-        if (
-          child.type === AST_NODE_TYPES.MemberExpression &&
-          child.object?.type === AST_NODE_TYPES.Identifier &&
-          child.object.name === propSource &&
-          child.property?.type === AST_NODE_TYPES.Identifier
-        ) {
-          uniqueProps.add(child.property.name)
-        }
-
-        if (
-          child.type === AST_NODE_TYPES.JSXSpreadAttribute &&
-          child.argument?.type === AST_NODE_TYPES.Identifier &&
-          child.argument.name === propSource
-        ) {
-          forwardsProps = true
-        }
-      })
-
-      propCount = uniqueProps.size
-    } else if (param.type === AST_NODE_TYPES.ObjectPattern) {
-      const uniqueProps = new Set<string>()
-
-      for (const property of param.properties) {
-        if (property.type !== AST_NODE_TYPES.Property) continue
-        if (property.key.type === AST_NODE_TYPES.Identifier) {
-          uniqueProps.add(property.key.name)
-        }
+      for (const pa of fnNode.getDescendantsOfKind(SyntaxKind.PropertyAccessExpression)) {
+        const obj = pa.getExpression().getText()
+        const prop = pa.getName()
+        if (obj === propSource) uniqueProps.add(prop)
       }
-
+      for (const sp of fnNode.getDescendantsOfKind(SyntaxKind.JsxSpreadAttribute)) {
+        const arg = sp.getExpression()?.getText?.() ?? ''
+        if (arg === propSource) forwardsProps = true
+      }
       propCount = uniqueProps.size
+    } else {
+      // object pattern
+      const elems = param.getDescendantsOfKind(SyntaxKind.BindingElement)
+      const unique = new Set<string>()
+      for (const e of elems) {
+        unique.add(e.getName?.() ?? e.getText())
+      }
+      propCount = unique.size
       forwardsProps = propCount >= 4
     }
 
-    if (propCount < 4 && !forwardsProps) return
+    if (propCount < 4 && !forwardsProps) continue
 
-    const key = `${filePath}-${fnNode.loc.start.line}-${componentName}`
-    if (reported.has(key)) return
+    const key = `${sourceFile.getFilePath()}-${fnNode.getStartLineNumber()}-${name}`
+    if (reported.has(key)) continue
     reported.add(key)
 
-    const context = lines.slice(
-      Math.max(0, fnNode.loc.start.line - 1),
-      Math.min(lines.length, fnNode.loc.start.line + 4)
-    )
-
+    const context = lines.slice(Math.max(0, fnNode.getStartLineNumber() - 1), Math.min(lines.length, fnNode.getStartLineNumber() + 4))
     issues.push({
-      id: `prop-drilling-${filePath}-${fnNode.loc.start.line}`,
-      file: filePath.split('/').pop() || filePath,
-      filePath,
+      id: `prop-drilling-${sourceFile.getFilePath()}-${fnNode.getStartLineNumber()}`,
+      file: sourceFile.getBaseName(),
+      filePath: sourceFile.getFilePath(),
       category: 'prop-drilling',
       problem: forwardsProps
-        ? `Provável prop drilling em \`${componentName}\` — recebe ${propCount} prop(s) e encaminha props para filhos`
-        : `\`${componentName}\` recebe ${propCount} prop(s) — considera reduzir a superfície de props`,
+        ? `Provável prop drilling em \`${name}\` — recebe ${propCount} prop(s) e encaminha props para filhos`
+        : `\`${name}\` recebe ${propCount} prop(s) — considera reduzir a superfície de props`,
       impact: propCount >= 6 ? 'Medium' : 'Low',
-      lineStart: fnNode.loc.start.line,
-      lineEnd: fnNode.loc.end.line,
+      lineStart: fnNode.getStartLineNumber(),
+      lineEnd: fnNode.getEndLineNumber(),
       lines: { before: context, after: [] },
-      patch: makePatch(context, []),
+      patch: { before: context.join('\n'), after: '' },
     })
   }
-
-  walk(ast, (node) => {
-    if (node.type === AST_NODE_TYPES.FunctionDeclaration && node.id?.name) {
-      inspect(node.id.name, node)
-      return
-    }
-
-    if (
-      node.type === AST_NODE_TYPES.VariableDeclarator &&
-      node.id?.type === AST_NODE_TYPES.Identifier &&
-      node.init &&
-      (node.init.type === AST_NODE_TYPES.ArrowFunctionExpression || node.init.type === AST_NODE_TYPES.FunctionExpression)
-    ) {
-      inspect(node.id.name, node.init)
-    }
-  })
 
   return issues
 }
 
 // ─── Detector: Dependências circulares ───────────────────────────────────────
 
-function extractLocalImports(source: string, fromFile: string, projectPath: string): string[] {
-  const results: string[] = []
-  const importRegex = /(?:import|export)\s+(?:[\s\S]*?from\s+)?['"](\.\.?\/[^'"]+)['"]/g
-  let m: RegExpExecArray | null
-  while ((m = importRegex.exec(source)) !== null) {
-    results.push(m[1])
+function detectCircularDeps(project: Project): Issue[] {
+  const importMap = new Map<string, string[]>()
+  for (const sf of project.getSourceFiles()) {
+    const deps = sf.getImportDeclarations()
+      .map(imp => imp.getModuleSpecifierSourceFile()?.getFilePath())
+      .filter(Boolean) as string[]
+    importMap.set(sf.getFilePath(), deps)
   }
-  return results
-}
 
-function detectCircularDeps(
-  allFiles: string[],
-  importMap: Map<string, string[]>,
-  projectPath: string
-): Issue[] {
   const issues: Issue[] = []
   const reported = new Set<string>()
 
@@ -604,24 +506,22 @@ function detectCircularDeps(
     return null
   }
 
-  for (const file of allFiles) {
+  for (const file of importMap.keys()) {
     const cycle = findCycle(file, file, new Set())
     if (!cycle) continue
-
     const key = [...cycle].sort().join('|')
     if (reported.has(key)) continue
     reported.add(key)
-
     issues.push({
       id: `circular-${key.slice(0, 60)}`,
-      file: file.split('/').pop() || file,
+      file: file.split('/').pop() ?? file,
       filePath: file,
       category: 'circular-dep',
-      problem: `Dependência circular: ${cycle.map(f => f.split('/').pop() || f).join(' → ')}`,
+      problem: `Dependência circular: ${cycle.map(f => f.split('/').pop()).join(' → ')}`,
       impact: 'High',
       lineStart: 1,
       lineEnd: 1,
-      lines: { before: ['// Dependência circular — quebra esta ligação'], after: [] },
+      lines: { before: ['// Dependência circular'], after: [] },
       patch: { before: '', after: '' },
     })
   }
@@ -632,78 +532,72 @@ function detectCircularDeps(
 // ─── Main ─────────────────────────────────────────────────────────────────────
 
 export async function runAnalysis(
-  files: Map<string, string>, // filePath -> content
+  files: Map<string, string>,
   onProgress?: (file: string) => void,
   opts: { maxFiles?: number; maxDepth?: number } = {}
 ): Promise<AnalysisResult> {
   const maxFiles = opts.maxFiles ?? DEFAULT_MAX_FILES
-  const projectPath = ''
-  const fileArray = Array.from(files.keys())
-  const truncated = fileArray.length >= maxFiles
+  const project = createTsMorphProject(files)
   const issues: Issue[] = []
+  const sourceFiles = project.getSourceFiles()
 
-  const importMap = new Map<string, string[]>()
-  const relFiles: string[] = fileArray
+  for (const sourceFile of sourceFiles) {
+    onProgress?.(sourceFile.getFilePath())
 
-  for (const filePath of fileArray.slice(0, maxFiles)) {
-    onProgress?.(filePath)
-    const source = files.get(filePath) || ''
-    if (!source.trim()) continue
-
-    importMap.set(filePath, extractLocalImports(source, filePath, projectPath))
-
-    const lines = getLines(source)
-
-    const issueSets = [
-      detectAnyTypes(filePath, source, lines),
-      detectDeadState(filePath, source, lines),
-      detectMissingDocs(filePath, source, lines),
-      detectOversized(filePath, source, lines),
-      detectConsoleLogs(filePath, source, lines),
-      detectEffectNoDeps(filePath, source, lines),
-      detectPropDrilling(filePath, source, lines),
-      detectGenericNaming(filePath, source, lines),
-    ]
-
-    for (const set of issueSets) {
-      if (Array.isArray(set)) issues.push(...set)
-      else if (set) issues.push(set)
-    }
+    issues.push(
+      ...detectAnyTypes(sourceFile),
+      ...detectConsoleLogs(sourceFile),
+      ...detectEffectNoDeps(sourceFile),
+      ...detectMissingDocs(sourceFile),
+      ...(detectDeadState(sourceFile) ? [detectDeadState(sourceFile)!] : []),
+      ...(detectOversized(sourceFile) ? [detectOversized(sourceFile)!] : []),
+      ...detectPropDrilling(sourceFile),
+      ...detectGenericNaming(sourceFile),
+    )
   }
 
-  // Circular deps: analisa o grafo completo no fim
-  issues.push(...detectCircularDeps(relFiles, importMap, projectPath))
+  // Dependências circulares via ts-morph
+  issues.push(...detectCircularDeps(project))
 
-  // Construir reverse map: ficheiro → quantos ficheiros o importam
+  // Enriquecer com effort, blastRadius, priority
+  const enriched = enrichIssues(issues, project)
+
+  return {
+    projectPath: '',
+    scannedFiles: sourceFiles.map(f => f.getFilePath()),
+    issues: enriched,
+    summary: {
+      total: enriched.length,
+      high: enriched.filter(i => i.impact === 'High').length,
+      medium: enriched.filter(i => i.impact === 'Medium').length,
+      low: enriched.filter(i => i.impact === 'Low').length,
+    },
+  }
+}
+
+function enrichIssues(issues: Issue[], project: Project): Issue[] {
   const reverseMap = new Map<string, number>()
-  for (const [, deps] of importMap.entries()) {
-    for (const dep of deps) {
-      reverseMap.set(dep, (reverseMap.get(dep) ?? 0) + 1)
+  for (const sourceFile of project.getSourceFiles()) {
+    for (const imp of sourceFile.getImportDeclarations()) {
+      const target = imp.getModuleSpecifierSourceFile()?.getFilePath()
+      if (target) reverseMap.set(target, (reverseMap.get(target) ?? 0) + 1)
     }
   }
 
-  // Enriquecer issues com effort, blastRadius, priority
-  const enrichedIssues = issues.map(issue => {
-    const effort = EFFORT[issue.category] ?? 'medium'
+  const EFFORT_MAP: Record<string, 'low' | 'medium' | 'high'> = {
+    'any-type': 'low', 'console-log': 'low', 'missing-docs': 'low',
+    'generic-naming': 'low', 'dead-state': 'medium', 'effect-no-deps': 'medium',
+    'prop-drilling': 'medium', 'oversized-component': 'high', 'circular-dep': 'high',
+  }
+
+  return issues.map(issue => {
+    const effort = EFFORT_MAP[issue.category] ?? 'medium'
     const blastRadius = reverseMap.get(issue.filePath) ?? 0
-    const impactScore = IMPACT_SCORE[issue.impact]
-    const effortScore = EFFORT_SCORE[effort]
+    const impactScore = { High: 3, Medium: 2, Low: 1 }[issue.impact]
+    const effortScore = { low: 1, medium: 2, high: 3 }[effort]
     const priority = (impactScore * 10 + blastRadius) / effortScore
     return { ...issue, effort, blastRadius, priority }
   })
-
-  return {
-    projectPath,
-    scannedFiles: fileArray.slice(0, maxFiles),
-    issues: enrichedIssues,
-    truncated,
-    summary: {
-      total: enrichedIssues.length,
-      high:   enrichedIssues.filter(i => i.impact === 'High').length,
-      medium: enrichedIssues.filter(i => i.impact === 'Medium').length,
-      low:    enrichedIssues.filter(i => i.impact === 'Low').length,
-    },
-  }
 }
 
 // Worker message handler

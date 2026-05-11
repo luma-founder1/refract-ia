@@ -6,12 +6,34 @@ import { GuidelinesPage } from './GuidelinesPage';
 import { SettingsPage } from './SettingsPage';
 import { ProjectView } from './projectView/ProjectView';
 import { Sidebar } from '../components/Sidebar';
+import { useAuth } from '../lib/AuthContext';
+import { AuthPage } from './AuthPage';
+import { SplashScreen } from '../components/SplashScreen';
+import { OnboardingPage } from './OnboardingPage';
 
 export type Page = 'home' | 'projects' | 'repos' | 'guidelines' | 'settings' | 'projectView' | 'reports' | 'chat' | 'deals' | 'accounts' | 'competitors' | 'feedback' | 'review';
 
 export const AppShell: React.FC = () => {
+  const { session, loading, profile } = useAuth();
   const [activePage, setActivePage] = useState<Page>('home');
   const [activeProjectId, setActiveProjectId] = useState<string | null>(null);
+
+  // Auth gate: show splash screen while loading auth state
+  if (loading) {
+    return <SplashScreen />;
+  }
+
+  // Auth gate: show login page if not authenticated
+  if (!session) {
+    return <AuthPage />;
+  }
+
+  // Onboarding gate: show onboarding if user hasn't completed it
+  if (profile && !profile.onboarding_completed) {
+    return <OnboardingPage onComplete={() => {}} />;
+  }
+
+  // User is authenticated and onboarding is complete, show app
 
   const handleNavigate = (page: Page | string, params?: any) => {
     if (params?.projectId) {

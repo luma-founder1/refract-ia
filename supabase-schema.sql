@@ -4,6 +4,22 @@
 -- Enable UUID extension
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 
+-- Users table
+CREATE TABLE IF NOT EXISTS public.users (
+  id UUID PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
+  auth_id UUID NOT NULL,
+  name TEXT NOT NULL,
+  email TEXT NOT NULL,
+  plan TEXT NOT NULL DEFAULT 'free' CHECK (plan IN ('free', 'pro', 'team', 'enterprise')),
+  onboarding_completed BOOLEAN NOT NULL DEFAULT false,
+  language TEXT NOT NULL DEFAULT 'en',
+  avatar_url TEXT,
+  github_token TEXT,
+  stripe_customer_id TEXT,
+  stripe_subscription_id TEXT,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
 -- Projects table
 CREATE TABLE IF NOT EXISTS projects (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
@@ -61,6 +77,8 @@ CREATE TABLE IF NOT EXISTS activity (
 );
 
 -- Create indexes for better performance
+CREATE INDEX IF NOT EXISTS idx_users_email ON public.users(email);
+CREATE INDEX IF NOT EXISTS idx_users_created_at ON public.users(created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_projects_user_id ON projects(user_id);
 CREATE INDEX IF NOT EXISTS idx_projects_created_at ON projects(created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_health_snapshots_project_id ON health_snapshots(project_id);
@@ -70,11 +88,19 @@ CREATE INDEX IF NOT EXISTS idx_activity_project_id ON activity(project_id);
 CREATE INDEX IF NOT EXISTS idx_activity_created_at ON activity(created_at DESC);
 
 -- Enable Row Level Security
+ALTER TABLE public.users ENABLE ROW LEVEL SECURITY;
 ALTER TABLE projects ENABLE ROW LEVEL SECURITY;
 ALTER TABLE health_snapshots ENABLE ROW LEVEL SECURITY;
 ALTER TABLE project_decisions ENABLE ROW LEVEL SECURITY;
 ALTER TABLE settings ENABLE ROW LEVEL SECURITY;
 ALTER TABLE activity ENABLE ROW LEVEL SECURITY;
+
+-- RLS Policies for users
+CREATE POLICY "Users can view own profile" ON public.users
+  FOR SELECT USING (auth.uid() = id);
+
+CREATE POLICY "Users can update own profile" ON public.users
+  FOR UPDATE USING (auth.uid() = id);
 
 -- RLS Policies for projects
 CREATE POLICY "Users can view own projects" ON projects
