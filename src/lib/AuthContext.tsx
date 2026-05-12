@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useEffect, useState, useCallback } from 'react'
 import { Session } from '@supabase/supabase-js'
+import { H } from 'highlight.run'
 import { supabase, UserProfile } from './supabase'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -12,7 +13,7 @@ interface AuthContextValue {
   signOut: () => Promise<void>
   signIn: (email: string, password: string) => Promise<{ error: Error | null }>
   signUp: (email: string, password: string) => Promise<{ error: Error | null }>
-  signUpWithGitHub: () => Promise<{ error: Error | null }>
+  continueWithGitHub: () => Promise<{ error: Error | null }>
 }
 
 // ─── Context ──────────────────────────────────────────────────────────────────
@@ -25,7 +26,7 @@ const AuthContext = createContext<AuthContextValue>({
   signOut: async () => {},
   signIn: async () => ({ error: null }),
   signUp: async () => ({ error: null }),
-  signUpWithGitHub: async () => ({ error: null }),
+  continueWithGitHub: async () => ({ error: null }),
 })
 
 export const useAuth = () => useContext(AuthContext)
@@ -38,7 +39,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [loading, setLoading] = useState(true)
 
   // Fetch profile from the users table
-  const fetchProfile = useCallback(async (userId: string) => {
+  const fetchProfile = useCallback(async (userId: string): Promise<UserProfile | null> => {
     const { data, error } = await supabase
       .from('users')
       .select('*')
@@ -48,8 +49,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     if (error) {
       console.warn('[auth] profile not found:', error.message)
       setProfile(null)
+      return null
     } else {
-      setProfile(data as UserProfile)
+      const nextProfile = data as UserProfile
+      setProfile(nextProfile)
+      return nextProfile
     }
   }, [])
 
@@ -107,20 +111,30 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   }, [])
 
-  const signUpWithGitHub = useCallback(async () => {
+  const continueWithGitHub = useCallback(async () => {
     try {
       const { error } = await supabase.auth.signInWithOAuth({
         provider: 'github',
         options: {
-          redirectTo: `${window.location.origin}/auth/callback`,
+          scopes: 'repo read:user',
+          redirectTo: window.location.origin,
         },
       })
       if (error) return { error }
       return { error: null }
     } catch (err) {
-      return { error: err instanceof Error ? err : new Error('GitHub sign up failed') }
+      return { error: err instanceof Error ? err : new Error('GitHub sign in failed') }
     }
   }, [])
+
+  useEffect(() => {
+    if (!session?.user) return
+
+    H.identify(session.user.email ?? session.user.id, {
+      id: session.user.id,
+      plan: profile?.plan ?? 'free',
+    })
+  }, [session, profile?.plan])
 
   // ── Bootstrap: get existing session on mount ──
   useEffect(() => {
@@ -140,6 +154,18 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, s) => {
       setSession(s)
       if (s?.user?.id) {
+        const providerToken = (s as Session & { provider_token?: string | null }).provider_token
+        if (providerToken) {
+          const { error } = await supabase
+            .from('users')
+            .update({ github_token: providerToken })
+            .eq('id', s.user.id)
+
+          if (error) {
+            console.warn('[auth] failed to store github token:', error.message)
+          }
+        }
+
         await fetchProfile(s.user.id)
       } else {
         setProfile(null)
@@ -150,7 +176,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   }, [fetchProfile])
 
   return (
-    <AuthContext.Provider value={{ session, profile, loading, refreshProfile, signOut, signIn, signUp, signUpWithGitHub }}>
+    <AuthContext.Provider value={{ session, profile, loading, refreshProfile, signOut, signIn, signUp, continueWithGitHub }}>
       {children}
     </AuthContext.Provider>
   )

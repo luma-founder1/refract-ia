@@ -1,23 +1,85 @@
 import { supabase } from './supabase'
-import type { AnalysisIssue, AnalysisResult, ApplyResult } from '../shared/types'
+import type { AnalysisIssue } from '../shared/types'
+
+export class RateLimitError extends Error {
+  reset: number
+
+  constructor(message: string, reset: number) {
+    super(message)
+    this.name = 'RateLimitError'
+    this.reset = reset
+  }
+}
+
+export interface GitHubRepo {
+  id: number
+  name: string
+  full_name: string
+  description: string | null
+  private: boolean
+  language: string | null
+  default_branch: string
+  updated_at: string
+  html_url: string
+}
+
+export interface GitHubBranch {
+  name: string
+  isDefault: boolean
+}
+
+export interface GitHubCloneResult {
+  files: Record<string, string>
+  branch: string
+}
+
+export interface GitHubPullRequestInput {
+  repoUrl: string
+  baseBranch: string
+  headBranch: string
+  title: string
+  body: string
+  changes: Array<{
+    filePath: string
+    newContent: string
+  }>
+}
+
+async function getAccessToken(): Promise<string> {
+  const { data: { session } } = await supabase.auth.getSession()
+  if (!session) throw new Error('Not authenticated')
+  return session.access_token
+}
+
+async function readResponse<T>(response: Response, fallbackMessage: string): Promise<T> {
+  if (response.status === 429) {
+    const data = await response.json().catch(() => ({ message: fallbackMessage, reset: Date.now() }))
+    throw new RateLimitError(data.message ?? fallbackMessage, data.reset ?? Date.now())
+  }
+
+  if (!response.ok) {
+    const data = await response.json().catch(() => ({ error: fallbackMessage }))
+    throw new Error(data.message ?? data.error ?? fallbackMessage)
+  }
+
+  return response.json() as Promise<T>
+}
 
 // ─── AI API Proxy ─────────────────────────────────────────────────────────────
 
 export async function explainIssue(issue: AnalysisIssue, fileSource: string, guidelines?: string): Promise<string> {
-  const { data: { session } } = await supabase.auth.getSession()
-  if (!session) throw new Error('Not authenticated')
+  const accessToken = await getAccessToken()
 
   const response = await fetch('/api/ai/explain', {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      'Authorization': `Bearer ${session.access_token}`,
+      'Authorization': `Bearer ${accessToken}`,
     },
     body: JSON.stringify({ issue, fileSource, guidelines }),
   })
 
-  if (!response.ok) throw new Error('Failed to explain issue')
-  const data = await response.json()
+  const data = await readResponse<{ explanation: string }>(response, 'Failed to explain issue')
   return data.explanation
 }
 
@@ -27,20 +89,18 @@ export async function refactorIssue(
   instruction?: string,
   guidelines?: string
 ): Promise<{ before: string; after: string }> {
-  const { data: { session } } = await supabase.auth.getSession()
-  if (!session) throw new Error('Not authenticated')
+  const accessToken = await getAccessToken()
 
   const response = await fetch('/api/ai/refactor', {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      'Authorization': `Bearer ${session.access_token}`,
+      'Authorization': `Bearer ${accessToken}`,
     },
     body: JSON.stringify({ issue, fileSource, instruction, guidelines }),
   })
 
-  if (!response.ok) throw new Error('Failed to refactor issue')
-  const data = await response.json()
+  const data = await readResponse<{ patch: { before: string; after: string } }>(response, 'Failed to refactor issue')
   return data.patch
 }
 
@@ -50,20 +110,18 @@ export async function generateBriefing(
   scannedFiles: string[],
   guidelines?: string
 ): Promise<string> {
-  const { data: { session } } = await supabase.auth.getSession()
-  if (!session) throw new Error('Not authenticated')
+  const accessToken = await getAccessToken()
 
   const response = await fetch('/api/ai/briefing', {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      'Authorization': `Bearer ${session.access_token}`,
+      'Authorization': `Bearer ${accessToken}`,
     },
     body: JSON.stringify({ projectPath, issues, scannedFiles, guidelines }),
   })
 
-  if (!response.ok) throw new Error('Failed to generate briefing')
-  const data = await response.json()
+  const data = await readResponse<{ briefing: string }>(response, 'Failed to generate briefing')
   return data.briefing
 }
 
@@ -77,57 +135,56 @@ export async function getProjectDependencies(projectPath: string): Promise<{ dep
 
 // ─── GitHub API ─────────────────────────────────────────────────────────────
 
-export async function getGitHubRepos(): Promise<any[]> {
-  const { data: { session } } = await supabase.auth.getSession()
-  if (!session) throw new Error('Not authenticated')
+export async function getGitHubRepos(): Promise<GitHubRepo[]> {
+  const accessToken = await getAccessToken()
 
   const response = await fetch('/api/github/repos', {
     headers: {
-      'Authorization': `Bearer ${session.access_token}`,
+      'Authorization': `Bearer ${accessToken}`,
     },
   })
 
-  if (!response.ok) throw new Error('Failed to get GitHub repos')
-  return response.json()
+  return readResponse<GitHubRepo[]>(response, 'Failed to get GitHub repos')
 }
 
-export async function cloneGitHubRepo(repoUrl: string, destPath: string, branch?: string): Promise<{ branch: string; destPath: string }> {
-  const { data: { session } } = await supabase.auth.getSession()
-  if (!session) throw new Error('Not authenticated')
+export async function getGitHubBranches(repoUrl: string): Promise<{ branches: GitHubBranch[] }> {
+  const accessToken = await getAccessToken()
+
+  const response = await fetch(`/api/github/branches?repoUrl=${encodeURIComponent(repoUrl)}`, {
+    headers: {
+      'Authorization': `Bearer ${accessToken}`,
+    },
+  })
+
+  return readResponse<{ branches: GitHubBranch[] }>(response, 'Failed to get GitHub branches')
+}
+
+export async function cloneGitHubRepo(repoUrl: string, branch?: string): Promise<GitHubCloneResult> {
+  const accessToken = await getAccessToken()
 
   const response = await fetch('/api/github/clone', {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      'Authorization': `Bearer ${session.access_token}`,
+      'Authorization': `Bearer ${accessToken}`,
     },
-    body: JSON.stringify({ repoUrl, destPath, branch }),
+    body: JSON.stringify({ repoUrl, branch }),
   })
 
-  if (!response.ok) throw new Error('Failed to clone repo')
-  return response.json()
+  return readResponse<GitHubCloneResult>(response, 'Failed to clone repo')
 }
 
-export async function createGitHubPullRequest(input: {
-  projectPath: string
-  repoUrl: string
-  baseBranch: string
-  headBranch: string
-  title: string
-  body: string
-}): Promise<any> {
-  const { data: { session } } = await supabase.auth.getSession()
-  if (!session) throw new Error('Not authenticated')
+export async function createGitHubPullRequest(input: GitHubPullRequestInput): Promise<{ url: string }> {
+  const accessToken = await getAccessToken()
 
   const response = await fetch('/api/github/pr', {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      'Authorization': `Bearer ${session.access_token}`,
+      'Authorization': `Bearer ${accessToken}`,
     },
     body: JSON.stringify(input),
   })
 
-  if (!response.ok) throw new Error('Failed to create PR')
-  return response.json()
+  return readResponse<{ url: string }>(response, 'Failed to create PR')
 }

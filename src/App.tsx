@@ -1,4 +1,5 @@
 import React from 'react';
+import { ErrorBoundary } from '@highlight-run/react';
 import { AppShell } from './pages/AppShell';
 import { FilesProvider } from './context/FilesContext';
 import { AuthProvider } from './lib/AuthContext';
@@ -10,10 +11,12 @@ import { AuthProvider } from './lib/AuthContext';
  */
 export const App: React.FC = () => {
   return (
-    <AuthProvider>
-      <FilesProvider>
-        <AppShell />
-      </FilesProvider>
-    </AuthProvider>
+    <ErrorBoundary>
+      <AuthProvider>
+        <FilesProvider>
+          <AppShell />
+        </FilesProvider>
+      </AuthProvider>
+    </ErrorBoundary>
   );
 };

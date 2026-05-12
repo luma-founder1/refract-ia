@@ -1,27 +1,35 @@
-import { createClient } from '@supabase/supabase-js'
 import Groq from 'groq-sdk'
+import { getAuthenticatedUser } from '../_lib/auth'
+import { applyRateLimitHeaders, checkRateLimit } from '../_lib/ratelimit'
 
 const groq = new Groq({ apiKey: process.env.GROQ_API_KEY || '' })
-
-const supabase = createClient(
-  process.env.VITE_SUPABASE_URL || '',
-  process.env.SUPABASE_SERVICE_ROLE_KEY || ''
-)
 
 export default async function handler(req: any, res: any) {
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed' })
   }
 
-  const authHeader = req.headers.authorization || ''
-  const token = authHeader.replace('Bearer ', '')
-  if (!token) {
-    return res.status(401).json({ error: 'Unauthorized' })
+  let user: { id: string }
+  let plan = 'free'
+  try {
+    const auth = await getAuthenticatedUser(req.headers.authorization)
+    user = auth.user
+    plan = auth.plan
+  } catch (error: any) {
+    return res.status(401).json({ error: error.message || 'Unauthorized' })
   }
 
-  const { data: { user }, error: authError } = await supabase.auth.getUser(token)
-  if (authError || !user) {
-    return res.status(401).json({ error: 'Unauthorized' })
+  const limitResult = await checkRateLimit(user.id, plan)
+  applyRateLimitHeaders(res, limitResult)
+
+  if (!limitResult.success) {
+    return res.status(429).json({
+      error: 'Rate limit exceeded',
+      message: plan === 'free'
+        ? 'Limite do plano Free atingido (20/hora). Faz upgrade para Pro.'
+        : `Limite atingido. Reset: ${new Date(limitResult.reset).toLocaleTimeString('pt-PT')}`,
+      reset: limitResult.reset,
+    })
   }
 
   const { issue, fileSource, instruction, guidelines } = req.body

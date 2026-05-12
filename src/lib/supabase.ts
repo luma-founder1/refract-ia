@@ -26,7 +26,9 @@ export interface UserProfile {
   name: string
   email: string
   plan: 'free' | 'pro' | 'team' | 'enterprise'
+  github_token?: string | null
   onboarding_completed: boolean
+  onboarding_answers?: Record<string, any>
   language: 'en' | 'pt' | 'es' | 'fr' | 'de'
   avatar_url: string | null
   created_at: string

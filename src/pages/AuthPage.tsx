@@ -11,7 +11,7 @@ export const AuthPage: React.FC = () => {
   const [loading, setLoading] = useState(false)
   const [githubLoading, setGithubLoading] = useState(false)
 
-  const { signIn, signUp, signUpWithGitHub } = useAuth()
+  const { signIn, signUp, continueWithGitHub } = useAuth()
 
   const handleSignIn = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -63,6 +63,7 @@ export const AuthPage: React.FC = () => {
         return
       }
 
+      sessionStorage.setItem('justSignedUp', 'true')
       const { error: err } = await signUp(email, password)
       if (err) {
         setError(err.message || 'Failed to create account')
@@ -79,7 +80,12 @@ export const AuthPage: React.FC = () => {
     setGithubLoading(true)
 
     try {
-      const { error: err } = await signUpWithGitHub()
+      if (mode === 'signup') {
+        sessionStorage.setItem('justSignedUp', 'true')
+      } else {
+        sessionStorage.removeItem('justSignedUp')
+      }
+      const { error: err } = await continueWithGitHub()
       if (err) {
         setError(err.message || 'Failed to sign up with GitHub')
         setGithubLoading(false)
@@ -306,7 +312,7 @@ export const AuthPage: React.FC = () => {
           ) : (
             <>
               <Github size={16} />
-              {mode === 'signin' ? 'Sign in with GitHub' : 'Sign up with GitHub'}
+              Continue with GitHub
             </>
           )}
         </button>

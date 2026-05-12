@@ -1,57 +1,196 @@
-import React, { useState, useEffect } from 'react';
-import { Plus, Search, Loader2, ExternalLink, Download, Lock, Globe } from 'lucide-react';
-import { Project } from '../shared/types';
-import { getAllProjects } from '../lib/db';
+import React, { useEffect, useMemo, useState } from 'react'
+import {
+  AlertCircle,
+  Download,
+  ExternalLink,
+  Github,
+  GitBranch,
+  Globe,
+  Loader2,
+  Lock,
+  Search,
+  X,
+} from 'lucide-react'
+import { createProject } from '../lib/db'
+import {
+  cloneGitHubRepo,
+  getGitHubBranches,
+  getGitHubRepos,
+  RateLimitError,
+  type GitHubBranch,
+  type GitHubRepo,
+} from '../lib/api'
+import { useFiles } from '../context/FilesContext'
+import { useAuth } from '../lib/AuthContext'
+import type { Project } from '../shared/types'
 
-// GitHub SVG icon
 const GitHubIcon: React.FC<{ size?: number }> = ({ size = 20 }) => (
   <svg width={size} height={size} viewBox="0 0 24 24" fill="currentColor">
     <path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0 0 24 12c0-6.63-5.37-12-12-12z" />
   </svg>
-);
+)
 
-const COL = { name: '35%', visibility: '15%', lastPush: '25%', actions: '25%' };
+interface BranchModalState {
+  repo: GitHubRepo
+  branches: GitHubBranch[]
+  selectedBranch: string
+}
 
 export const ReposPage: React.FC<{ onNavigate: (page: string, params?: any) => void }> = ({ onNavigate }) => {
-  const [repos, setRepos] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [search, setSearch] = useState('');
-  const [hoveredRow, setHoveredRow] = useState<string | null>(null);
-  const [cloneUrl, setCloneUrl] = useState('');
-  const [cloningUrl, setCloningUrl] = useState(false);
+  const { profile, continueWithGitHub } = useAuth()
+  const { setFileMap } = useFiles()
+  const [repos, setRepos] = useState<GitHubRepo[]>([])
+  const [loading, setLoading] = useState(false)
+  const [search, setSearch] = useState('')
+  const [error, setError] = useState<string | null>(null)
+  const [connectingGitHub, setConnectingGitHub] = useState(false)
+  const [loadingBranchesFor, setLoadingBranchesFor] = useState<number | null>(null)
+  const [cloningRepoId, setCloningRepoId] = useState<number | null>(null)
+  const [branchModal, setBranchModal] = useState<BranchModalState | null>(null)
 
-  const fetchRepos = async () => {
-    setLoading(true);
-    try {
-      const p = await getAllProjects();
-      setRepos((p || []).filter((proj: Project) => !!proj.repo).map((r: Project) => ({
-        id: r.id,
-        name: r.name,
-        full_name: r.repo,
-        private: false,
-        updated_at: r.last_run,
-        isLocal: true,
-        path: r.path
-      })));
-    } catch (err) {
-      console.error('Failed to load repos', err);
-    }
-    setLoading(false);
-  };
+  const hasGitHubConnection = Boolean(profile?.github_token)
 
   useEffect(() => {
-    fetchRepos();
-  }, []);
+    if (!hasGitHubConnection) {
+      setRepos([])
+      setLoading(false)
+      return
+    }
 
-  const handleCloneFromUrl = async () => {
-    // GitHub cloning not available in web version yet
-    alert('GitHub cloning not available in web version yet. Use folder upload from the Projects page instead.');
-  };
+    let cancelled = false
 
-  const filtered = repos.filter(r => 
-    r.name.toLowerCase().includes(search.toLowerCase()) || 
-    (r.full_name && r.full_name.toLowerCase().includes(search.toLowerCase()))
-  );
+    const loadRepos = async () => {
+      setLoading(true)
+      setError(null)
+
+      try {
+        const nextRepos = await getGitHubRepos()
+        if (!cancelled) setRepos(nextRepos)
+      } catch (err) {
+        if (cancelled) return
+        if (err instanceof RateLimitError) {
+          setError(err.message)
+        } else if (err instanceof Error) {
+          setError(err.message)
+        } else {
+          setError('Failed to load GitHub repositories.')
+        }
+      } finally {
+        if (!cancelled) setLoading(false)
+      }
+    }
+
+    loadRepos()
+    return () => {
+      cancelled = true
+    }
+  }, [hasGitHubConnection])
+
+  const filteredRepos = useMemo(() => {
+    const needle = search.trim().toLowerCase()
+    if (!needle) return repos
+
+    return repos.filter((repo) => {
+      return [
+        repo.name,
+        repo.full_name,
+        repo.description ?? '',
+        repo.language ?? '',
+      ].some((value) => value.toLowerCase().includes(needle))
+    })
+  }, [repos, search])
+
+  const handleConnectGitHub = async () => {
+    setError(null)
+    setConnectingGitHub(true)
+
+    try {
+      const { error: oauthError } = await continueWithGitHub()
+      if (oauthError) {
+        setError(oauthError.message || 'Failed to continue with GitHub.')
+        setConnectingGitHub(false)
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to continue with GitHub.')
+      setConnectingGitHub(false)
+    }
+  }
+
+  const handleOpenBranchModal = async (repo: GitHubRepo) => {
+    setError(null)
+    setLoadingBranchesFor(repo.id)
+
+    try {
+      const { branches } = await getGitHubBranches(repo.html_url)
+      const defaultBranch = branches.find((branch) => branch.isDefault)?.name ?? repo.default_branch
+
+      setBranchModal({
+        repo,
+        branches,
+        selectedBranch: defaultBranch,
+      })
+    } catch (err) {
+      if (err instanceof RateLimitError) {
+        setError(err.message)
+      } else if (err instanceof Error) {
+        setError(err.message)
+      } else {
+        setError('Failed to load repository branches.')
+      }
+    } finally {
+      setLoadingBranchesFor(null)
+    }
+  }
+
+  const handleCloneAndAnalyse = async () => {
+    if (!branchModal) return
+
+    setCloningRepoId(branchModal.repo.id)
+    setError(null)
+
+    try {
+      const cloneResult = await cloneGitHubRepo(branchModal.repo.html_url, branchModal.selectedBranch)
+      const files = Object.entries(cloneResult.files)
+      const fileMap = new Map<string, string>(files)
+      setFileMap(fileMap)
+
+      let project: Project
+      try {
+        project = await createProject({
+          name: branchModal.repo.name,
+          path: 'uploaded',
+          repo: branchModal.repo.html_url,
+          branch: cloneResult.branch,
+          status: 'Not analysed',
+          last_run: null,
+        })
+      } catch (err) {
+        console.warn('Failed to persist cloned project in Supabase, using local fallback', err)
+        project = {
+          id: `local-${Date.now()}`,
+          name: branchModal.repo.name,
+          path: 'uploaded',
+          repo: branchModal.repo.html_url,
+          branch: cloneResult.branch,
+          status: 'Not analysed',
+          last_run: null,
+        }
+      }
+
+      setBranchModal(null)
+      onNavigate('project-view', { projectId: project.id })
+    } catch (err) {
+      if (err instanceof RateLimitError) {
+        setError(err.message)
+      } else if (err instanceof Error) {
+        setError(err.message)
+      } else {
+        setError('Failed to clone repository.')
+      }
+    } finally {
+      setCloningRepoId(null)
+    }
+  }
 
   return (
     <div style={{ padding: '32px 36px', height: '100%', overflowY: 'auto', background: 'var(--background)' }}>
@@ -61,110 +200,258 @@ export const ReposPage: React.FC<{ onNavigate: (page: string, params?: any) => v
         @keyframes pulse { 0% { opacity: 0.3 } 50% { opacity: 0.6 } 100% { opacity: 0.3 } }
         .skeleton { background: var(--muted); border-radius: var(--radius); animation: pulse 1.5s infinite ease-in-out; }
       `}</style>
-      
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 32 }}>
-        <h1 className="page-title" style={{ fontSize: 28, marginBottom: 4 }}>Repositories</h1>
+
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 24, gap: 16 }}>
+        <div>
+          <h1 className="page-title" style={{ fontSize: 28, marginBottom: 6 }}>Repositories</h1>
+          <p style={{ fontSize: 13, color: 'var(--muted-foreground)' }}>
+            Browse your GitHub repositories and clone one directly into Refract for analysis.
+          </p>
+        </div>
       </div>
 
-      {/* Clone repository */}
-      <p className="section-label" style={{ marginBottom: 12 }}>Clone repository (Coming Soon)</p>
-      <div style={{ display: 'flex', gap: 10, marginBottom: 32, opacity: 0.5 }}>
-        <input
-          value={cloneUrl}
-          onChange={e => setCloneUrl(e.target.value)}
-          placeholder="https://github.com/user/repo.git"
-          className="input font-mono"
-          style={{ flex: 1, height: 40 }}
-          disabled
-        />
-        <button
-          onClick={handleCloneFromUrl}
-          disabled={true}
-          className="btn btn-primary"
-          style={{ height: 40, padding: '0 20px', whiteSpace: 'nowrap' }}
+      {error && (
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'flex-start',
+            gap: 10,
+            padding: '12px 14px',
+            borderRadius: 12,
+            marginBottom: 20,
+            background: 'rgba(255, 91, 79, 0.08)',
+            border: '1px solid rgba(255, 91, 79, 0.18)',
+            color: '#ff7f76',
+          }}
         >
-          <Download size={16} />
-          Clone & Analyse
-        </button>
-      </div>
+          <AlertCircle size={16} style={{ flexShrink: 0, marginTop: 1 }} />
+          <span style={{ fontSize: 12, lineHeight: 1.6 }}>{error}</span>
+        </div>
+      )}
 
-      {/* Repos list */}
-      <p className="section-label" style={{ marginBottom: 12 }}>Local Repositories</p>
-
-      {/* Search */}
-      <div style={{ position: 'relative', marginBottom: 20 }}>
-        <Search size={16} style={{ position: 'absolute', left: 14, top: '50%', transform: 'translateY(-50%)', color: 'var(--muted-foreground)' }} />
-        <input 
-          className="input"
-          style={{ width: '100%', height: 40, paddingLeft: 40 }}
-          placeholder="Search local repositories..."
-          value={search}
-          onChange={e => setSearch(e.target.value)}
-        />
-      </div>
-
-      {/* Table header */}
-      <div style={{ display: 'flex', padding: '0 16px', marginBottom: 8 }}>
-        {(['Name', 'Visibility', 'Last push', 'Actions'] as const).map((col, i) => (
-          <span key={col} className="section-label" style={{ width: Object.values(COL)[i], fontSize: 10 }}>{col}</span>
-        ))}
-      </div>
-
-      <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
-        {loading ? (
-          Array(5).fill(0).map((_, i) => (
-            <div key={i} style={{ height: 48, display: 'flex', alignItems: 'center', padding: '0 16px', borderBottom: i === 4 ? 'none' : '1px solid var(--border)' }}>
-              <div className="skeleton" style={{ width: '30%', height: 12 }} />
-              <div style={{ width: '15%' }}><div className="skeleton" style={{ width: 40, height: 12 }} /></div>
-              <div className="skeleton" style={{ width: '25%', height: 12 }} />
+      {!hasGitHubConnection ? (
+        <div
+          className="card"
+          style={{
+            maxWidth: 680,
+            padding: 28,
+            display: 'flex',
+            flexDirection: 'column',
+            gap: 16,
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            <div style={{ width: 44, height: 44, borderRadius: 12, background: 'var(--accent)', display: 'grid', placeItems: 'center' }}>
+              <GitHubIcon size={22} />
             </div>
-          ))
-        ) : filtered.length === 0 ? (
-          <div style={{ padding: '40px 0', textAlign: 'center' }}>
-            <p style={{ fontSize: 14, color: 'var(--muted-foreground)' }}>No local repositories found.</p>
+            <div>
+              <p style={{ fontSize: 16, fontWeight: 600, color: 'var(--foreground)', marginBottom: 4 }}>Connect GitHub</p>
+              <p style={{ fontSize: 13, color: 'var(--muted-foreground)', lineHeight: 1.6 }}>
+                Connect your GitHub account to list repositories, pick a branch, and clone projects straight into the analysis flow.
+              </p>
+            </div>
           </div>
-        ) : (
-          filtered.map((repo, idx) => (
-            <div 
-              key={repo.id}
-              onMouseEnter={() => setHoveredRow(repo.id)}
-              onMouseLeave={() => setHoveredRow(null)}
-              style={{ 
-                display: 'flex', 
-                alignItems: 'center', 
-                height: 52, 
-                padding: '0 16px', 
-                borderBottom: idx === filtered.length - 1 ? 'none' : '1px solid var(--border)',
-                background: hoveredRow === repo.id ? 'var(--accent)' : 'transparent',
-                transition: 'background 0.1s ease'
-              }}
-            >
-              <div style={{ width: COL.name, display: 'flex', alignItems: 'center', gap: 10 }}>
-                <GitHubIcon size={16} />
-                <span style={{ fontSize: 14, color: 'var(--foreground)', fontWeight: 500 }}>{repo.name}</span>
-              </div>
-              <div style={{ width: COL.visibility }}>
-                <span className={repo.private ? 'badge badge-error' : 'badge badge-success'} style={{ padding: '2px 8px', fontSize: 10, textTransform: 'uppercase' }}>
-                  {repo.private ? <Lock size={10} style={{ marginRight: 4 }} /> : <Globe size={10} style={{ marginRight: 4 }} />}
-                  {repo.private ? 'Private' : 'Public'}
-                </span>
-              </div>
-              <div style={{ width: COL.lastPush, fontSize: 12, color: 'var(--muted-foreground)' }}>
-                {repo.updated_at ? new Date(repo.updated_at).toLocaleDateString() : 'Never'}
-              </div>
-              <div style={{ width: COL.actions, display: 'flex', justifyContent: 'flex-end' }}>
-                <button 
-                  onClick={() => onNavigate('project-view', { projectId: repo.id })}
-                  className="btn btn-secondary btn-sm"
-                  style={{ display: 'flex', alignItems: 'center', gap: 6 }}
+
+          <button
+            onClick={handleConnectGitHub}
+            disabled={connectingGitHub}
+            className="btn btn-primary"
+            style={{ alignSelf: 'flex-start', gap: 8 }}
+          >
+            {connectingGitHub ? <Loader2 size={15} className="spin" /> : <Github size={15} />}
+            {connectingGitHub ? 'Connecting...' : 'Connect GitHub'}
+          </button>
+        </div>
+      ) : (
+        <>
+          <div style={{ position: 'relative', marginBottom: 20 }}>
+            <Search size={16} style={{ position: 'absolute', left: 14, top: '50%', transform: 'translateY(-50%)', color: 'var(--muted-foreground)' }} />
+            <input
+              className="input"
+              style={{ width: '100%', height: 40, paddingLeft: 40 }}
+              placeholder="Search repositories, descriptions, or languages..."
+              value={search}
+              onChange={(event) => setSearch(event.target.value)}
+            />
+          </div>
+
+          <div style={{ display: 'flex', padding: '0 16px', marginBottom: 8 }}>
+            {(['Name', 'Visibility', 'Updated', 'Actions'] as const).map((column, index) => (
+              <span
+                key={column}
+                className="section-label"
+                style={{ width: ['40%', '16%', '19%', '25%'][index], fontSize: 10 }}
+              >
+                {column}
+              </span>
+            ))}
+          </div>
+
+          <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
+            {loading ? (
+              Array.from({ length: 5 }).map((_, index) => (
+                <div
+                  key={index}
+                  style={{ height: 62, display: 'flex', alignItems: 'center', padding: '0 16px', borderBottom: index === 4 ? 'none' : '1px solid var(--border)' }}
                 >
-                  <ExternalLink size={14} /> Open
-                </button>
+                  <div style={{ width: '40%' }}><div className="skeleton" style={{ width: '70%', height: 12 }} /></div>
+                  <div style={{ width: '16%' }}><div className="skeleton" style={{ width: 60, height: 12 }} /></div>
+                  <div style={{ width: '19%' }}><div className="skeleton" style={{ width: 90, height: 12 }} /></div>
+                  <div style={{ width: '25%', display: 'flex', justifyContent: 'flex-end' }}><div className="skeleton" style={{ width: 130, height: 34 }} /></div>
+                </div>
+              ))
+            ) : filteredRepos.length === 0 ? (
+              <div style={{ padding: '44px 24px', textAlign: 'center' }}>
+                <p style={{ fontSize: 14, color: 'var(--foreground)', marginBottom: 6 }}>No repositories found.</p>
+                <p style={{ fontSize: 12, color: 'var(--muted-foreground)' }}>
+                  Try another search term or reconnect GitHub if the list looks incomplete.
+                </p>
               </div>
+            ) : (
+              filteredRepos.map((repo, index) => (
+                <div
+                  key={repo.id}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    minHeight: 62,
+                    padding: '10px 16px',
+                    borderBottom: index === filteredRepos.length - 1 ? 'none' : '1px solid var(--border)',
+                  }}
+                >
+                  <div style={{ width: '40%', display: 'flex', alignItems: 'flex-start', gap: 10, minWidth: 0 }}>
+                    <GitHubIcon size={16} />
+                    <div style={{ minWidth: 0 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+                        <span style={{ fontSize: 14, color: 'var(--foreground)', fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                          {repo.full_name}
+                        </span>
+                        {repo.language && (
+                          <span className="badge badge-muted" style={{ padding: '2px 8px', fontSize: 10 }}>
+                            {repo.language}
+                          </span>
+                        )}
+                      </div>
+                      <p style={{ fontSize: 12, color: 'var(--muted-foreground)', lineHeight: 1.5 }}>
+                        {repo.description || 'No description provided.'}
+                      </p>
+                    </div>
+                  </div>
+
+                  <div style={{ width: '16%' }}>
+                    <span className={repo.private ? 'badge badge-error' : 'badge badge-success'} style={{ padding: '2px 8px', fontSize: 10, textTransform: 'uppercase' }}>
+                      {repo.private ? <Lock size={10} style={{ marginRight: 4 }} /> : <Globe size={10} style={{ marginRight: 4 }} />}
+                      {repo.private ? 'Private' : 'Public'}
+                    </span>
+                  </div>
+
+                  <div style={{ width: '19%', fontSize: 12, color: 'var(--muted-foreground)' }}>
+                    {new Date(repo.updated_at).toLocaleDateString('en-US')}
+                  </div>
+
+                  <div style={{ width: '25%', display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
+                    <a
+                      href={repo.html_url}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="btn btn-ghost btn-sm"
+                      style={{ gap: 6 }}
+                    >
+                      <ExternalLink size={13} /> Open
+                    </a>
+                    <button
+                      onClick={() => handleOpenBranchModal(repo)}
+                      className="btn btn-secondary btn-sm"
+                      disabled={loadingBranchesFor === repo.id || cloningRepoId === repo.id}
+                      style={{ gap: 6, minWidth: 126, justifyContent: 'center' }}
+                    >
+                      {loadingBranchesFor === repo.id ? <Loader2 size={13} className="spin" /> : <Download size={13} />}
+                      Clone & Analyse
+                    </button>
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+        </>
+      )}
+
+      {branchModal && (
+        <div
+          style={{
+            position: 'fixed',
+            inset: 0,
+            background: 'rgba(0, 0, 0, 0.7)',
+            backdropFilter: 'blur(6px)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 1200,
+            padding: 24,
+          }}
+          onClick={() => (cloningRepoId ? null : setBranchModal(null))}
+        >
+          <div
+            className="card"
+            style={{ width: '100%', maxWidth: 460, padding: 28, position: 'relative' }}
+            onClick={(event) => event.stopPropagation()}
+          >
+            <button
+              type="button"
+              onClick={() => (cloningRepoId ? null : setBranchModal(null))}
+              className="btn btn-ghost btn-sm"
+              style={{ position: 'absolute', right: 18, top: 18, width: 32, height: 32, padding: 0 }}
+            >
+              <X size={14} />
+            </button>
+
+            <div style={{ marginBottom: 24 }}>
+              <p style={{ fontSize: 18, fontWeight: 600, color: 'var(--foreground)', marginBottom: 8 }}>
+                Clone & Analyse
+              </p>
+              <p style={{ fontSize: 13, color: 'var(--muted-foreground)', lineHeight: 1.6 }}>
+                Choose the branch you want to load from <strong>{branchModal.repo.full_name}</strong>.
+              </p>
             </div>
-          ))
-        )}
-      </div>
+
+            <label style={{ display: 'block', fontSize: 12, color: 'var(--foreground)', marginBottom: 8 }}>
+              Branch
+            </label>
+            <div style={{ position: 'relative', marginBottom: 24 }}>
+              <GitBranch size={15} style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', color: 'var(--muted-foreground)' }} />
+              <select
+                className="input"
+                value={branchModal.selectedBranch}
+                onChange={(event) => setBranchModal((prev) => prev ? { ...prev, selectedBranch: event.target.value } : prev)}
+                style={{ width: '100%', paddingLeft: 36, appearance: 'none' }}
+                disabled={cloningRepoId === branchModal.repo.id}
+              >
+                {branchModal.branches.map((branch) => (
+                  <option key={branch.name} value={branch.name}>
+                    {branch.name}{branch.isDefault ? ' (default)' : ''}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
+              <p style={{ fontSize: 12, color: 'var(--muted-foreground)' }}>
+                {cloningRepoId === branchModal.repo.id ? 'A clonar repositório...' : 'The repository will be loaded into the in-app analysis flow.'}
+              </p>
+              <button
+                type="button"
+                onClick={handleCloneAndAnalyse}
+                className="btn btn-primary"
+                disabled={cloningRepoId === branchModal.repo.id}
+                style={{ gap: 8, minWidth: 152, justifyContent: 'center' }}
+              >
+                {cloningRepoId === branchModal.repo.id ? <Loader2 size={14} className="spin" /> : <Download size={14} />}
+                {cloningRepoId === branchModal.repo.id ? 'Cloning...' : 'Clone & Analyse'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
-  );
-};
+  )
+}

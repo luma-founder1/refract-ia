@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react'
+import { H } from 'highlight.run'
 import {
   GitBranch, Play, Layout, Code2, ZapOff,
   FileText, Eye, ChevronLeft, ChevronRight, Check, X,
@@ -10,7 +11,7 @@ import { CodeMap } from './CodeMap'
 import { LogoMark } from '../../components/Logo'
 import type { DiffLine, Phase, Decision } from './types'
 import { getProject, saveDecision, getDecisionHistory, saveHealthSnapshot } from '../../lib/db'
-import { explainIssue, refactorIssue, generateBriefing } from '../../lib/api'
+import { explainIssue, refactorIssue, generateBriefing, createGitHubPullRequest, RateLimitError } from '../../lib/api'
 import { useFiles } from '../../context/FilesContext'
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -81,6 +82,70 @@ const DiffLineRow: React.FC<DiffLine> = ({ num, content, type }) => {
       </span>
     </div>
   )
+}
+
+const normalizeProjectPath = (path: string) => path.replace(/\\/g, '/').replace(/^\/+/, '')
+
+const getFileContentForIssue = (filePath: string, fileMap: Map<string, string>) => {
+  const normalizedFilePath = normalizeProjectPath(filePath)
+
+  for (const [key, value] of fileMap.entries()) {
+    const normalizedKey = normalizeProjectPath(key)
+    if (normalizedKey === normalizedFilePath || normalizedKey.endsWith(`/${normalizedFilePath}`)) {
+      return { filePath: normalizedKey, content: value }
+    }
+  }
+
+  return null
+}
+
+const buildPullRequestChanges = (
+  issues: AnalysisIssue[],
+  decisions: Record<string, Decision>,
+  fileMap: Map<string, string>
+) => {
+  const acceptedIssues = issues.filter((issue) => {
+    const afterContent = issue.patch?.after ?? issue.lines.after.join('\n')
+    return decisions[issue.id] === 'accepted' && afterContent.trim().length > 0
+  })
+
+  const latestContents = new Map<string, string>(
+    Array.from(fileMap.entries()).map(([path, content]) => [normalizeProjectPath(path), content])
+  )
+  const changedFiles = new Map<string, string>()
+
+  for (const issue of acceptedIssues) {
+    const resolvedFile = getFileContentForIssue(issue.filePath, latestContents)
+    if (!resolvedFile) {
+      throw new Error(`Could not map ${issue.file} back to a source file in memory.`)
+    }
+
+    const before = issue.patch?.before || issue.lines.before.join('\n')
+    const after = issue.patch?.after || issue.lines.after.join('\n')
+    const currentContent = resolvedFile.content
+
+    if (before.trim().length === 0) {
+      latestContents.set(resolvedFile.filePath, currentContent)
+      continue
+    }
+
+    if (!currentContent.includes(before)) {
+      if (currentContent.includes(after)) {
+        changedFiles.set(resolvedFile.filePath, currentContent)
+        continue
+      }
+
+      throw new Error(`Could not apply the accepted patch for ${issue.file}. The original snippet was not found.`)
+    }
+
+    const nextContent = currentContent.replace(before, after)
+    latestContents.set(resolvedFile.filePath, nextContent)
+    changedFiles.set(resolvedFile.filePath, nextContent)
+  }
+
+  return acceptedIssues.length > 0
+    ? Array.from(changedFiles.entries()).map(([filePath, newContent]) => ({ filePath, newContent }))
+    : []
 }
 
 // ─── Analysing panel ──────────────────────────────────────────────────────────
@@ -157,30 +222,42 @@ const SuccessState: React.FC<{
   summary: AnalysisResult['summary']
   decisions: Record<string, Decision>
   issues: AnalysisIssue[]
-  projectPath: string
+  project: Project | null
+  fileMap: Map<string, string>
   onReviewAgain: () => void
-}> = ({ summary, decisions, issues, projectPath, onReviewAgain }) => {
-  const accepted = Object.entries(decisions).filter(([, d]) => d === 'accepted').length
+}> = ({ summary, decisions, issues, project, fileMap, onReviewAgain }) => {
+  const [creatingPr, setCreatingPr] = useState(false)
+  const [prError, setPrError] = useState<string | null>(null)
+  const [prUrl, setPrUrl] = useState<string | null>(null)
+
+  const acceptedIssues = issues.filter((issue) => decisions[issue.id] === 'accepted')
+  const acceptedCount = acceptedIssues.length
   const rejected = Object.entries(decisions).filter(([, d]) => d === 'rejected').length
+  const acceptedChanges = issues.filter((issue) => {
+    const afterContent = issue.patch?.after ?? issue.lines.after.join('\n')
+    return decisions[issue.id] === 'accepted' && afterContent.trim().length > 0
+  })
 
   const handleExportChangelog = () => {
-    const accepted = issues.filter(i => decisions[i.id] === 'accepted')
-
     const lines = [
       '# Refract Changelog',
-      `Generated: ${new Date().toISOString()}`,
-      `Project: ${projectPath}`,
+      `> Generated: ${new Date().toISOString()}`,
+      `> Project: ${project?.path ?? 'uploaded'}`,
+      `> Branch: ${project?.branch ?? 'main'}`,
       '',
-      `## Summary`,
-      `- ${accepted.length} changes accepted`,
-      `- ${summary.high} high impact issues`,
+      '## Summary',
+      `- **${acceptedIssues.length}** changes accepted`,
+      `- **${summary.high}** high impact · **${summary.medium}** medium · **${summary.low}** low`,
+      '',
+      '---',
       '',
       '## Changes',
       '',
-      ...accepted.map(issue => [
-        `### ${issue.file} — ${issue.category}`,
+      ...acceptedIssues.map(issue => [
+        `### \`${issue.file}\` — ${CATEGORY_META[issue.category]?.name ?? issue.category}`,
+        `**Impact:** ${issue.impact} | **Effort:** ${issue.effort ?? 'unknown'}`,
+        '',
         `**Problem:** ${issue.problem}`,
-        `**Impact:** ${issue.impact}`,
         '',
         '**Before:**',
         '```typescript',
@@ -206,9 +283,57 @@ const SuccessState: React.FC<{
     URL.revokeObjectURL(url)
   }
 
+  const handleCreatePR = async () => {
+    if (!project?.repo) return
+
+    setCreatingPr(true)
+    setPrError(null)
+    setPrUrl(null)
+
+    try {
+      const changes = buildPullRequestChanges(issues, decisions, fileMap)
+      if (changes.length === 0) {
+        throw new Error('There are no accepted code changes ready to send to GitHub.')
+      }
+
+      const headBranch = `refract/fix-${Date.now()}`
+      const response = await createGitHubPullRequest({
+        repoUrl: project.repo,
+        baseBranch: project.branch ?? 'main',
+        headBranch,
+        title: 'refract: apply code quality fixes',
+        body: `This PR was generated by Refract.\n\n- Accepted changes: ${acceptedCount}\n- High impact issues: ${summary.high}\n- Medium impact issues: ${summary.medium}\n- Low impact issues: ${summary.low}`,
+        changes,
+      })
+
+      setPrUrl(response.url)
+      window.open(response.url, '_blank', 'noopener,noreferrer')
+    } catch (error) {
+      H.consumeError(
+        error as Error,
+        'Failed to create GitHub pull request',
+        {
+          feature: 'pull-request',
+          projectId: project?.id ?? 'unknown',
+          acceptedChanges: String(acceptedChanges.length),
+        }
+      )
+
+      if (error instanceof RateLimitError) {
+        setPrError(error.message)
+      } else if (error instanceof Error) {
+        setPrError(error.message)
+      } else {
+        setPrError('Failed to create GitHub pull request.')
+      }
+    } finally {
+      setCreatingPr(false)
+    }
+  }
+
   const metrics = [
     { label: 'Issues encontrados', value: summary.total },
-    { label: 'Aceites',            value: accepted       },
+    { label: 'Aceites',            value: acceptedCount  },
     { label: 'Rejeitados',         value: rejected       },
     { label: 'High impact',        value: summary.high  },
   ]
@@ -229,15 +354,43 @@ const SuccessState: React.FC<{
       </div>
 
       <div style={{ display: 'flex', gap: 12 }}>
-        {accepted > 0 && (
+        {acceptedCount > 0 && (
           <button onClick={handleExportChangelog} className="btn btn-primary" style={{ gap: 8 }}>
             <Download size={14} /> Export Changelog
+          </button>
+        )}
+        {project?.repo && acceptedChanges.length > 0 && (
+          <button
+            onClick={handleCreatePR}
+            className="btn btn-secondary"
+            disabled={creatingPr}
+            style={{ gap: 8 }}
+          >
+            {creatingPr ? <CheckCheck size={14} className="spin" /> : <GitBranch size={14} />}
+            {creatingPr ? 'Creating PR...' : 'Create PR'}
           </button>
         )}
         <button onClick={onReviewAgain} className="btn btn-ghost">
           Rever novamente
         </button>
       </div>
+
+      {prError && (
+        <div style={{ marginTop: 18, width: '100%', maxWidth: 720, borderRadius: 10, border: '1px solid rgba(255, 91, 79, 0.2)', background: 'rgba(255, 91, 79, 0.08)', padding: '12px 14px', color: '#ff7f76', fontSize: 12, lineHeight: 1.6 }}>
+          {prError}
+        </div>
+      )}
+
+      {prUrl && (
+        <a
+          href={prUrl}
+          target="_blank"
+          rel="noreferrer"
+          style={{ marginTop: 18, fontSize: 13, color: 'var(--ring)', textDecoration: 'underline' }}
+        >
+          Open created pull request
+        </a>
+      )}
     </div>
   )
 }
@@ -281,6 +434,7 @@ const [explanationCache, setExplanationCache] = useState<Record<string, string>>
   const [decisionHistory, setDecisionHistory] = useState<Record<string, { decision: string; created_at: string }>>({})
   const [currentSig, setCurrentSig] = useState<string | null>(null)
   const [loadingRefactor, setLoadingRefactor] = useState(false)
+  const [requestError, setRequestError] = useState<string | null>(null)
   // Guest session (test account) - used to bypass onboarding for dev/testing
   const [guestUser, setGuestUser] = useState<any | null>(null)
 
@@ -334,9 +488,22 @@ const [explanationCache, setExplanationCache] = useState<Record<string, string>>
         // For now, use empty string as file source
         const fileSource = '';
         const explanation = await explainIssue(currentIssue, fileSource);
+        setRequestError(null)
         setIssueExplanation(explanation);
         setExplanationCache(prev => ({ ...prev, [issueId]: explanation }));
       } catch (err) {
+        H.consumeError(
+          err as Error,
+          'Failed to explain issue',
+          {
+            feature: 'analysis-explanation',
+            projectId: projectId ?? 'unknown',
+            issueId,
+          }
+        )
+        if (err instanceof RateLimitError) {
+          setRequestError(err.message)
+        }
         setIssueExplanation(issueProblem);
       } finally {
         setLoadingExplanation(false);
@@ -358,8 +525,22 @@ const [explanationCache, setExplanationCache] = useState<Record<string, string>>
         // For now, use empty string as file source
         const fileSource = '';
         const newPatch = await refactorIssue(currentIssue, fileSource)
+        setRequestError(null)
         updateIssueLines(currentIssue.id, newPatch)
       } catch (err) {
+        H.consumeError(
+          err as Error,
+          'Failed to auto-refactor issue',
+          {
+            feature: 'analysis-refactor',
+            projectId: projectId ?? 'unknown',
+            issueId: currentIssue.id,
+            fileCount: String(fileMap.size),
+          }
+        )
+        if (err instanceof RateLimitError) {
+          setRequestError(err.message)
+        }
         console.error('Auto-refactor failed', err)
       } finally {
         setLoadingRefactor(false)
@@ -477,6 +658,7 @@ const [explanationCache, setExplanationCache] = useState<Record<string, string>>
     setDecisions({})
     setScannedFiles([])
     setActiveFile(null)
+    setRequestError(null)
 
     // Serialize Map to plain object for postMessage
     const serialized: Record<string, string> = {}
@@ -507,8 +689,21 @@ const [explanationCache, setExplanationCache] = useState<Record<string, string>>
             analysisResult.issues,
             analysisResult.scannedFiles,
           )
+          setRequestError(null)
           setBriefingText(briefing ?? `Analisei ${analysisResult.scannedFiles.length} ficheiros e encontrei ${analysisResult.summary.total} problemas.`)
         } catch (err) {
+          H.consumeError(
+            err as Error,
+            'Failed to generate analysis briefing',
+            {
+              feature: 'analysis-briefing',
+              projectId: project?.id ?? 'unknown',
+              fileCount: String(analysisResult.scannedFiles.length),
+            }
+          )
+          if (err instanceof RateLimitError) {
+            setRequestError(err.message)
+          }
           setBriefingText(`Analisei ${analysisResult.scannedFiles.length} ficheiros e encontrei ${analysisResult.summary.total} problemas.`)
         }
         setSelectedCat(analysisResult.issues[0]?.category ?? null)
@@ -695,6 +890,22 @@ const [explanationCache, setExplanationCache] = useState<Record<string, string>>
   // ── Center panel ──────────────────────────────────────────────────────────
   const CenterPanel = (
     <div style={{ flex: 1, background: flashId ? flashBg : C.bg, overflowY: 'auto', padding: phase === 'idle' || phase === 'briefing' ? 0 : '20px 24px', display: 'flex', flexDirection: 'column', transition: 'background 0.3s ease' }}>
+      {requestError && (
+        <div
+          style={{
+            margin: phase === 'idle' || phase === 'briefing' ? '20px 24px 0' : '0 0 16px',
+            padding: '12px 14px',
+            borderRadius: 10,
+            background: 'rgba(255, 91, 79, 0.08)',
+            border: '1px solid rgba(255, 91, 79, 0.18)',
+            color: '#ff7f76',
+            fontSize: 12,
+            lineHeight: 1.6,
+          }}
+        >
+          {requestError}
+        </div>
+      )}
 
       {phase === 'idle' && !viewingFile && (
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', gap: 12 }}>
@@ -763,7 +974,8 @@ const [explanationCache, setExplanationCache] = useState<Record<string, string>>
           summary={result.summary}
           decisions={decisions}
           issues={allIssues}
-          projectPath={project?.path ?? ''}
+          project={project}
+          fileMap={fileMap}
           onReviewAgain={() => { setPhase('idle'); setResult(null); setDecisions({}) }}
         />
       ) : null}
