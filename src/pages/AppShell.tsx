@@ -11,6 +11,37 @@ import { AuthPage } from './AuthPage';
 import { SplashScreen } from '../components/SplashScreen';
 import { OnboardingPage } from './OnboardingPage';
 
+class ErrorBoundary extends React.Component<{ children?: React.ReactNode }, { hasError: boolean; error: string | null }> {
+  constructor(props: any) {
+    super(props);
+    this.state = { hasError: false, error: null };
+  }
+  static getDerivedStateFromError(error: any) {
+    return { hasError: true, error: (error && error.message) || String(error) };
+  }
+  componentDidCatch(error: any, info: any) {
+    console.error('[ErrorBoundary] Caught:', error, info);
+  }
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div style={{ padding: 40, color: '#fff', background: '#0a0a0a', minHeight: '100vh' }}>
+          <p style={{ color: '#ef4444', fontFamily: 'monospace', fontSize: 13 }}>
+            {this.state.error}
+          </p>
+          <button
+            onClick={() => this.setState({ hasError: false, error: null })}
+            style={{ marginTop: 16, padding: '8px 16px', background: '#3B82F6', color: '#fff', border: 'none', borderRadius: 6, cursor: 'pointer' }}
+          >
+            Tentar novamente
+          </button>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
+
 export type Page = 'home' | 'projects' | 'repos' | 'guidelines' | 'settings' | 'projectView' | 'reports' | 'chat' | 'deals' | 'accounts' | 'competitors' | 'feedback' | 'review';
 
 export const AppShell: React.FC = () => {
@@ -95,7 +126,9 @@ export const AppShell: React.FC = () => {
         <Sidebar activePage={activePage} onNavigate={(p) => handleNavigate(p)} />
       )}
       <main style={{ flex: 1, overflow: 'hidden', height: '100vh' }}>
-        {renderPage()}
+        <ErrorBoundary>
+          {renderPage()}
+        </ErrorBoundary>
       </main>
     </div>
   );
