@@ -1,199 +1,435 @@
-import React, { useState } from 'react'
-import { Save, Trash2, Zap, FileText, Check } from 'lucide-react'
-
-// ─── Constants ────────────────────────────────────────────────────────────────
+import React, { useEffect, useState } from 'react'
+import { Check, ChevronRight, Globe, Loader2, LogOut, ShieldAlert, User2 } from 'lucide-react'
+import { useAuth } from '../lib/AuthContext'
+import { openPricingUrl } from '../lib/billing'
+import { supabase, UserProfile } from '../lib/supabase'
 
 const C = {
-  bg: 'var(--canvas)', surface: 'var(--surface-1)', border: 'var(--hairline)',
-  text: 'var(--ink)', muted: 'var(--ink-muted)', subtle: 'var(--surface-2)',
-  blue: 'var(--accent-blue)', green: 'var(--semantic-success)', red: 'var(--gradient-coral)',
+  bg: 'var(--canvas)',
+  surface: 'var(--surface-1)',
+  border: 'var(--hairline)',
+  text: 'var(--ink)',
+  muted: 'var(--ink-muted)',
+  subtle: 'var(--surface-2)',
+  blue: 'var(--accent-blue)',
+  green: 'var(--semantic-success)',
+  red: '#ff5b4f',
 }
 
-// ─── Sub-components ───────────────────────────────────────────────────────────
+type LanguageOption = {
+  label: string
+  value: UserProfile['language']
+}
 
-const Row: React.FC<{ label: string; desc?: string; children: React.ReactNode; last?: boolean }> = ({ label, desc, children, last }) => (
-  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '14px 0', borderBottom: last ? 'none' : `1px solid ${C.border}`, gap: 16 }}>
-    <div>
-      <span style={{ fontSize: 12, color: C.text, display: 'block', marginBottom: desc ? 2 : 0 }}>{label}</span>
-      {desc && <span style={{ fontSize: 11, color: C.muted }}>{desc}</span>}
-    </div>
-    {children}
-  </div>
-)
+type PlanOption = {
+  name: UserProfile['plan']
+  title: string
+  price: string
+  description: string
+}
+
+const languageOptions: LanguageOption[] = [
+  { label: 'English', value: 'en' },
+  { label: 'Português', value: 'pt' },
+  { label: 'Español', value: 'es' },
+  { label: 'Français', value: 'fr' },
+  { label: 'Deutsch', value: 'de' },
+]
+
+const planOptions: PlanOption[] = [
+  { name: 'free', title: 'Free', price: '$0', description: 'For trying Refract with the basics.' },
+  { name: 'pro', title: 'Pro', price: '$20', description: 'For solo builders who want more velocity.' },
+  { name: 'team', title: 'Team', price: '$49', description: 'For small teams reviewing code together.' },
+  { name: 'enterprise', title: 'Enterprise', price: '$1500', description: 'For larger orgs with premium support needs.' },
+]
+
+const planRank: Record<UserProfile['plan'], number> = {
+  free: 0,
+  pro: 1,
+  team: 2,
+  enterprise: 3,
+}
+
+const toPlanLabel = (plan: UserProfile['plan']) => {
+  switch (plan) {
+    case 'free':
+      return 'Free'
+    case 'pro':
+      return 'Pro'
+    case 'team':
+      return 'Team'
+    case 'enterprise':
+      return 'Enterprise'
+  }
+}
 
 const SectionLabel: React.FC<{ children: React.ReactNode }> = ({ children }) => (
-  <p style={{ fontSize: 10, color: C.muted, textTransform: 'uppercase', letterSpacing: '1.2px', marginBottom: 12 }}>{children}</p>
+  <p
+    style={{
+      fontSize: 10,
+      color: C.muted,
+      textTransform: 'uppercase',
+      letterSpacing: '1.2px',
+      marginBottom: 12,
+    }}
+  >
+    {children}
+  </p>
 )
 
-// ─── Main ─────────────────────────────────────────────────────────────────────
+const cardStyle: React.CSSProperties = {
+  background: C.surface,
+  border: `1px solid ${C.border}`,
+  borderRadius: 12,
+  padding: 20,
+}
 
 export const SettingsPage: React.FC = () => {
-  const [name, setName] = useState('Lopes')
-  const [saved, setSaved] = useState(false)
-  const [guidelines, setGuidelines] = useState(
-    '# Global Guidelines\n\n' +
-    '- Usa TypeScript estrito — sem any\n' +
-    '- Componentes com menos de 100 linhas\n' +
-    '- Nomes descritivos — sem data, item, temp\n' +
-    '- Documenta todos os exports públicos\n'
-  )
-  const [guidelinesSaved, setGuidelinesSaved] = useState(false)
-  const [confirmDelete, setConfirmDelete] = useState(false)
+  const { profile, refreshProfile, signOut } = useAuth()
+  const [name, setName] = useState('')
+  const [selectedLanguage, setSelectedLanguage] = useState<UserProfile['language']>('en')
+  const [isSavingName, setIsSavingName] = useState(false)
+  const [nameSaved, setNameSaved] = useState(false)
+  const [isSavingLanguage, setIsSavingLanguage] = useState(false)
+  const [languageSaved, setLanguageSaved] = useState(false)
+  const [isSigningOut, setIsSigningOut] = useState(false)
 
-  const handleSaveAccount = () => {
-    setSaved(true)
-    setTimeout(() => setSaved(false), 2000)
-  }
+  useEffect(() => {
+    setName(profile?.name ?? '')
+  }, [profile?.name])
 
-  const handleSaveGuidelines = () => {
-    setGuidelinesSaved(true)
-    setTimeout(() => setGuidelinesSaved(false), 2000)
-  }
+  useEffect(() => {
+    setSelectedLanguage(profile?.language ?? 'en')
+  }, [profile?.language])
 
-  const handleClearData = () => {
-    if (confirmDelete) {
-      // limpar SQLite local — IPC call quando backend estiver pronto
-      setConfirmDelete(false)
-    } else {
-      setConfirmDelete(true)
-      setTimeout(() => setConfirmDelete(false), 4000)
+  useEffect(() => {
+    if (!nameSaved) return
+
+    const timeoutId = window.setTimeout(() => setNameSaved(false), 2200)
+    return () => window.clearTimeout(timeoutId)
+  }, [nameSaved])
+
+  useEffect(() => {
+    if (!languageSaved) return
+
+    const timeoutId = window.setTimeout(() => setLanguageSaved(false), 1800)
+    return () => window.clearTimeout(timeoutId)
+  }, [languageSaved])
+
+  const handleSaveProfile = async () => {
+    if (!profile || isSavingName) return
+
+    const trimmedName = name.trim()
+    if (!trimmedName || trimmedName === profile.name) return
+
+    setIsSavingName(true)
+    setNameSaved(false)
+
+    try {
+      const { error } = await supabase
+        .from('users')
+        .update({ name: trimmedName })
+        .eq('id', profile.id)
+
+      if (error) throw error
+
+      await refreshProfile()
+      setName(trimmedName)
+      setNameSaved(true)
+    } catch (error) {
+      console.error('[settings] failed to save name:', error)
+    } finally {
+      setIsSavingName(false)
     }
   }
+
+  const handleLanguageChange = async (event: React.ChangeEvent<HTMLSelectElement>) => {
+    if (!profile || isSavingLanguage) return
+
+    const nextLanguage = event.target.value as UserProfile['language']
+    const previousLanguage = profile.language
+    if (nextLanguage === previousLanguage) return
+
+    setSelectedLanguage(nextLanguage)
+    setIsSavingLanguage(true)
+    setLanguageSaved(false)
+
+    try {
+      const { error } = await supabase
+        .from('users')
+        .update({ language: nextLanguage })
+        .eq('id', profile.id)
+
+      if (error) throw error
+
+      await refreshProfile()
+      setLanguageSaved(true)
+    } catch (error) {
+      setSelectedLanguage(previousLanguage)
+      console.error('[settings] failed to update language:', error)
+    } finally {
+      setIsSavingLanguage(false)
+    }
+  }
+
+  const handleUpgrade = () => {
+    if (openPricingUrl()) return
+    window.alert('Billing is not yet configured in this build. Set VITE_PRICING_URL to enable upgrades.')
+  }
+
+  const handleSignOut = async () => {
+    if (isSigningOut) return
+
+    setIsSigningOut(true)
+    try {
+      await signOut()
+    } finally {
+      setIsSigningOut(false)
+    }
+  }
+
+  if (!profile) {
+    return (
+      <div style={{ padding: '32px 36px', height: '100%', overflowY: 'auto', boxSizing: 'border-box' }}>
+        <h1 className="page-title" style={{ marginBottom: 24 }}>Settings</h1>
+        <div style={{ ...cardStyle, maxWidth: 640 }}>
+          <p style={{ fontSize: 14, color: C.text, marginBottom: 6 }}>Profile unavailable</p>
+          <p style={{ fontSize: 12, color: C.muted, lineHeight: 1.6 }}>
+            We could not load your account data right now. Refresh the session and try again.
+          </p>
+        </div>
+      </div>
+    )
+  }
+
+  const isNameDirty = name.trim().length > 0 && name.trim() !== profile.name
+  const currentPlanRank = planRank[profile.plan]
 
   return (
     <div style={{ padding: '32px 36px', height: '100%', overflowY: 'auto', boxSizing: 'border-box' }}>
       <h1 className="page-title" style={{ marginBottom: 32 }}>Settings</h1>
 
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 32, maxWidth: 640 }}>
-
-        {/* ── Account ─────────────────────────────────────────────────────── */}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 32, maxWidth: 760, paddingBottom: 48 }}>
         <section>
-          <SectionLabel>Account</SectionLabel>
-          <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 8, padding: '4px 20px' }}>
-            <Row label="Name">
-              <input
-                className="input"
-                style={{ width: 240, height: 32 }}
-                value={name}
-                onChange={e => setName(e.target.value)}
-              />
-            </Row>
-            <Row label="Email">
-              <input
-                className="input"
-                style={{ width: 240, height: 32, opacity: 0.5 }}
-                value="lopes@example.com"
-                disabled
-              />
-            </Row>
-            <Row label="Plan" desc="Estás no plano Free" last>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                <span style={{ fontSize: 10, background: C.subtle, color: C.muted, borderRadius: 4, padding: '2px 8px', fontWeight: 500 }}>Free</span>
+          <SectionLabel>Profile</SectionLabel>
+          <div style={cardStyle}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 18 }}>
+              <div style={{ width: 34, height: 34, borderRadius: 10, background: C.subtle, display: 'grid', placeItems: 'center' }}>
+                <User2 size={16} color={C.text} />
               </div>
-            </Row>
-          </div>
-          <div style={{ marginTop: 12 }}>
-            <button
-              onClick={handleSaveAccount}
-              className="btn btn-primary btn-sm"
-              style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-              {saved ? <Check size={11} /> : <Save size={11} />}
-              {saved ? 'Saved' : 'Save changes'}
-            </button>
-          </div>
-        </section>
-
-        {/* ── Upgrade ─────────────────────────────────────────────────────── */}
-        <section>
-          <SectionLabel>Upgrade</SectionLabel>
-          <div style={{ background: 'linear-gradient(135deg, #0d0d1f 0%, #111111 100%)', border: `1px solid ${C.blue}33`, borderRadius: 8, padding: '20px' }}>
-            <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 16 }}>
               <div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
-                  <Zap size={14} color={C.blue} />
-                  <span style={{ fontSize: 13, fontWeight: 600, color: C.text }}>Refract Pro</span>
-                  <span style={{ fontSize: 10, color: C.blue, background: `${C.blue}18`, borderRadius: 4, padding: '2px 6px', fontWeight: 600 }}>$20/mo</span>
-                </div>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
-                  {[
-                    'Projetos ilimitados',
-                    'Anomaly Detection',
-                    'Instability Tracking',
-                    'Pattern Consistency',
-                    'Histórico ilimitado',
-                  ].map(f => (
-                    <div key={f} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                      <Check size={10} color={C.blue} />
-                      <span style={{ fontSize: 11, color: C.muted }}>{f}</span>
-                    </div>
-                  ))}
-                </div>
+                <p style={{ fontSize: 14, fontWeight: 600, color: C.text, marginBottom: 2 }}>Your profile</p>
+                <p style={{ fontSize: 12, color: C.muted }}>Update the visible account details stored in Supabase.</p>
               </div>
+            </div>
+
+            <div style={{ display: 'grid', gap: 16 }}>
+              <div>
+                <label style={{ display: 'block', fontSize: 12, color: C.text, marginBottom: 8 }}>Name</label>
+                <input
+                  className="input"
+                  value={name}
+                  onChange={event => setName(event.target.value)}
+                  placeholder="Your name"
+                />
+              </div>
+
+              <div>
+                <label style={{ display: 'block', fontSize: 12, color: C.text, marginBottom: 8 }}>Email</label>
+                <input
+                  className="input"
+                  value={profile.email}
+                  readOnly
+                  disabled
+                  style={{ opacity: 0.6, cursor: 'not-allowed' }}
+                />
+              </div>
+            </div>
+
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginTop: 18 }}>
               <button
-                style={{ flexShrink: 0, height: 34, padding: '0 16px', background: C.blue, border: 'none', borderRadius: 6, fontSize: 12, fontWeight: 600, color: '#fff', cursor: 'pointer', transition: 'opacity 0.12s ease', whiteSpace: 'nowrap' }}
-                onMouseEnter={e => (e.currentTarget.style.opacity = '0.85')}
-                onMouseLeave={e => (e.currentTarget.style.opacity = '1')}>
-                Upgrade to Pro
+                onClick={handleSaveProfile}
+                className="btn btn-primary btn-sm"
+                disabled={!isNameDirty || isSavingName}
+                style={{ minWidth: 126, justifyContent: 'center' }}
+              >
+                {isSavingName ? <Loader2 size={13} className="spin" /> : null}
+                {isSavingName ? 'Saving...' : 'Save changes'}
               </button>
+              {nameSaved && (
+                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12, color: C.green }}>
+                  <Check size={13} />
+                  Saved
+                </span>
+              )}
             </div>
           </div>
         </section>
 
-        {/* ── Guidelines ──────────────────────────────────────────────────── */}
         <section>
-          <SectionLabel>Global Guidelines</SectionLabel>
-          <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 8, padding: '16px' }}>
-            <p style={{ fontSize: 11, color: C.muted, marginBottom: 12, lineHeight: 1.6 }}>
-              Estas guidelines são injetadas como contexto em todas as análises e refactorizações. Define os padrões do teu projeto.
-            </p>
-            <textarea
-              value={guidelines}
-              onChange={e => setGuidelines(e.target.value)}
-              style={{
-                width: '100%', minHeight: 180, background: C.bg,
-                border: `1px solid ${C.border}`, borderRadius: 6,
-                padding: '10px 12px', fontSize: 12, color: '#ccc',
-                fontFamily: 'Geist Mono, monospace', lineHeight: 1.6,
-                resize: 'vertical', outline: 'none', boxSizing: 'border-box',
-              }}
-              onFocus={e => (e.currentTarget.style.borderColor = C.blue)}
-              onBlur={e => (e.currentTarget.style.borderColor = C.border)}
-            />
-          </div>
-          <div style={{ marginTop: 12 }}>
-            <button
-              onClick={handleSaveGuidelines}
-              className="btn btn-primary btn-sm"
-              style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-              {guidelinesSaved ? <Check size={11} /> : <FileText size={11} />}
-              {guidelinesSaved ? 'Saved' : 'Save guidelines'}
-            </button>
+          <SectionLabel>Preferences</SectionLabel>
+          <div style={cardStyle}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 18 }}>
+              <div style={{ width: 34, height: 34, borderRadius: 10, background: C.subtle, display: 'grid', placeItems: 'center' }}>
+                <Globe size={16} color={C.text} />
+              </div>
+              <div>
+                <p style={{ fontSize: 14, fontWeight: 600, color: C.text, marginBottom: 2 }}>Language</p>
+                <p style={{ fontSize: 12, color: C.muted }}>Saved immediately after you change it.</p>
+              </div>
+            </div>
+
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+              <div style={{ flex: '1 1 280px', minWidth: 220 }}>
+                <select
+                  className="input"
+                  value={selectedLanguage}
+                  onChange={handleLanguageChange}
+                  disabled={isSavingLanguage}
+                  style={{ appearance: 'none', cursor: isSavingLanguage ? 'progress' : 'pointer' }}
+                >
+                  {languageOptions.map(option => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <span style={{ fontSize: 12, color: isSavingLanguage ? C.text : languageSaved ? C.green : C.muted }}>
+                {isSavingLanguage ? 'Saving...' : languageSaved ? 'Saved' : 'Auto-saves'}
+              </span>
+            </div>
           </div>
         </section>
 
-        {/* ── Danger zone ─────────────────────────────────────────────────── */}
         <section>
-          <SectionLabel>Danger zone</SectionLabel>
-          <div style={{ background: C.surface, border: `1px solid var(--hairline)`, borderRadius: 8, padding: '4px 20px' }}>
-            <Row label="Clear local data" desc="Remove todos os projetos e histórico guardados localmente." last>
+          <SectionLabel>Plan</SectionLabel>
+          <div style={{ ...cardStyle, paddingBottom: 16 }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16, marginBottom: 18, flexWrap: 'wrap' }}>
+              <div>
+                <p style={{ fontSize: 14, fontWeight: 600, color: C.text, marginBottom: 6 }}>Your current plan</p>
+                <p style={{ fontSize: 12, color: C.muted }}>Temporary upgrade action opens the public pricing page.</p>
+              </div>
+              <span className="badge badge-muted" style={{ fontSize: 11, padding: '4px 10px', textTransform: 'capitalize' }}>
+                {toPlanLabel(profile.plan)}
+              </span>
+            </div>
+
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: 12 }}>
+              {planOptions.map(plan => {
+                const rank = planRank[plan.name]
+                const isCurrentPlan = plan.name === profile.plan
+                const canUpgrade = rank > currentPlanRank
+
+                return (
+                  <div
+                    key={plan.name}
+                    style={{
+                      background: isCurrentPlan ? 'linear-gradient(180deg, rgba(10,114,239,0.12) 0%, rgba(10,114,239,0.03) 100%)' : C.bg,
+                      border: `1px solid ${isCurrentPlan ? 'rgba(10,114,239,0.35)' : C.border}`,
+                      borderRadius: 12,
+                      padding: 16,
+                      minHeight: 190,
+                      display: 'flex',
+                      flexDirection: 'column',
+                    }}
+                  >
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginBottom: 10 }}>
+                      <p style={{ fontSize: 14, fontWeight: 600, color: C.text }}>{plan.title}</p>
+                      {isCurrentPlan ? (
+                        <span className="badge badge-medium" style={{ fontSize: 10, padding: '2px 8px' }}>Current</span>
+                      ) : null}
+                    </div>
+
+                    <p style={{ fontSize: 22, fontWeight: 600, color: C.text, letterSpacing: '-0.03em', marginBottom: 8 }}>
+                      {plan.price}
+                      <span style={{ fontSize: 12, fontWeight: 500, color: C.muted, marginLeft: 4 }}>
+                        {plan.name === 'enterprise' ? '/mo+' : '/mo'}
+                      </span>
+                    </p>
+                    <p style={{ fontSize: 12, color: C.muted, lineHeight: 1.6, marginBottom: 18 }}>
+                      {plan.description}
+                    </p>
+
+                    <div style={{ marginTop: 'auto' }}>
+                      {canUpgrade ? (
+                        <button
+                          className="btn btn-primary btn-sm"
+                          style={{ width: '100%', justifyContent: 'space-between' }}
+                          onClick={handleUpgrade}
+                        >
+                          <span>Upgrade</span>
+                          <ChevronRight size={14} />
+                        </button>
+                      ) : (
+                        <div
+                          style={{
+                            width: '100%',
+                            minHeight: 34,
+                            borderRadius: 10,
+                            background: C.subtle,
+                            display: 'grid',
+                            placeItems: 'center',
+                            fontSize: 12,
+                            color: isCurrentPlan ? C.text : C.muted,
+                            fontWeight: 500,
+                          }}
+                        >
+                          {isCurrentPlan ? 'Active plan' : 'Included below your tier'}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+        </section>
+
+        <section>
+          <SectionLabel>Danger Zone</SectionLabel>
+          <div style={{ ...cardStyle, borderColor: 'rgba(255,91,79,0.2)' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 18 }}>
+              <div style={{ width: 34, height: 34, borderRadius: 10, background: 'rgba(255,91,79,0.08)', display: 'grid', placeItems: 'center' }}>
+                <ShieldAlert size={16} color={C.red} />
+              </div>
+              <div>
+                <p style={{ fontSize: 14, fontWeight: 600, color: C.text, marginBottom: 2 }}>Sensitive actions</p>
+                <p style={{ fontSize: 12, color: C.muted }}>These actions affect your session and account access.</p>
+              </div>
+            </div>
+
+            <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
               <button
-                onClick={handleClearData}
-                style={{
-                  height: 30, padding: '0 14px', flexShrink: 0,
-                  background: confirmDelete ? C.red : 'transparent',
-                  border: `1px solid ${confirmDelete ? C.red : 'var(--hairline)'}`,
-                  borderRadius: 5, fontSize: 11, fontWeight: 500,
-                  color: confirmDelete ? '#fff' : C.red,
-                  cursor: 'pointer', transition: 'all 0.12s ease',
-                  display: 'flex', alignItems: 'center', gap: 6,
-                }}>
-                <Trash2 size={11} />
-                {confirmDelete ? 'Tens a certeza?' : 'Clear data'}
+                className="btn btn-secondary btn-sm"
+                onClick={handleSignOut}
+                disabled={isSigningOut}
+                style={{ minWidth: 120, justifyContent: 'center' }}
+              >
+                {isSigningOut ? <Loader2 size={13} className="spin" /> : <LogOut size={13} />}
+                {isSigningOut ? 'Signing out...' : 'Sign out'}
               </button>
-            </Row>
+
+              <button
+                onClick={() => window.alert('Contact support')}
+                style={{
+                  minWidth: 140,
+                  height: 34,
+                  padding: '0 14px',
+                  borderRadius: 10,
+                  border: '1px solid rgba(255,91,79,0.25)',
+                  background: 'rgba(255,91,79,0.08)',
+                  color: C.red,
+                  fontSize: 12,
+                  fontWeight: 600,
+                  cursor: 'pointer',
+                }}
+              >
+                Delete account
+              </button>
+            </div>
           </div>
         </section>
-
       </div>
     </div>
   )

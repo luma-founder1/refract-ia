@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { HomePage } from './HomePage';
 import { ProjectsPage } from './ProjectsPage';
 import { ReposPage } from './ReposPage';
@@ -14,9 +14,17 @@ import { OnboardingPage } from './OnboardingPage';
 export type Page = 'home' | 'projects' | 'repos' | 'guidelines' | 'settings' | 'projectView' | 'reports' | 'chat' | 'deals' | 'accounts' | 'competitors' | 'feedback' | 'review';
 
 export const AppShell: React.FC = () => {
-  const { session, loading, profile } = useAuth();
+  const { session, loading, profile, refreshProfile } = useAuth();
   const [activePage, setActivePage] = useState<Page>('home');
   const [activeProjectId, setActiveProjectId] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (session && !profile) {
+      // Try to refresh/create profile if it wasn't loaded yet
+      refreshProfile().catch(() => {})
+    }
+  }, [session, profile, refreshProfile])
+
 
   // Auth gate: show splash screen while loading auth state
   if (loading) {
@@ -28,9 +36,25 @@ export const AppShell: React.FC = () => {
     return <AuthPage />;
   }
 
+  // Wait for profile to load after session is established
+  if (session && !profile) {
+    return <SplashScreen />;
+  }
+
   // Onboarding gate: show onboarding if user hasn't completed it
   if (profile && !profile.onboarding_completed) {
-    return <OnboardingPage onComplete={() => {}} />;
+    return (
+      <OnboardingPage
+        onComplete={async () => {
+          try {
+            sessionStorage.removeItem('justSignedUp')
+            await refreshProfile()
+          } catch (err) {
+            console.error('onboarding onComplete refreshProfile failed', err)
+          }
+        }}
+      />
+    )
   }
 
   // User is authenticated and onboarding is complete, show app
@@ -54,7 +78,7 @@ export const AppShell: React.FC = () => {
         return <HomePage onNavigate={handleNavigate} />;
       case 'projects':
       case 'deals':
-        return <ProjectsPage onOpenProject={(id) => handleNavigate('projectView', { projectId: id })} />;
+        return <ProjectsPage onOpenProject={(id) => handleNavigate('projectView', { projectId: id })} onNavigate={handleNavigate} />;
       case 'repos':
       case 'competitors':
         return <ReposPage onNavigate={handleNavigate} />;

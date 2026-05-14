@@ -14,9 +14,10 @@ const IGNORE_PATHS = ['node_modules', '.git', 'dist', 'build', '.next'];
 interface Props {
   onClose: () => void;
   onProjectCreated: (project: Project) => void;
+  onNavigate?: (page: string, params?: any) => void;
 }
 
-export const NewProjectModal: React.FC<Props> = ({ onClose, onProjectCreated }) => {
+export const NewProjectModal: React.FC<Props> = ({ onClose, onProjectCreated, onNavigate }) => {
   const [selected, setSelected] = useState<'folder' | 'repo' | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -87,8 +88,15 @@ export const NewProjectModal: React.FC<Props> = ({ onClose, onProjectCreated }) 
   };
 
   const handleConnectRepo = async () => {
-    // For now, GitHub repo cloning is not implemented in web version
-    setError('GitHub cloning not available in web version yet. Use folder upload instead.');
+    setError('')
+    if (typeof onNavigate === 'function') {
+      onClose()
+      onNavigate('repos')
+      return
+    }
+
+    // Fallback message when navigation isn't available
+    setError('GitHub cloning not available in this build. Use folder upload instead.')
   };
 
   return (
@@ -140,25 +148,25 @@ export const NewProjectModal: React.FC<Props> = ({ onClose, onProjectCreated }) 
           {/* Option cards */}
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
               {[
-              { key: 'folder' as const, icon: <Folder size={24} />, title: 'Local Folder', sub: 'Upload a project folder from your machine.' },
-              { key: 'repo'   as const, icon: <GitBranch size={24} />, title: 'Repository', sub: 'Clone a remote repository (coming soon).' },
-            ].map(opt => (
-              <div
-                key={opt.key}
-                onClick={() => opt.key === 'repo' ? null : setSelected(opt.key)}
-                className="card"
-                style={{
-                  background: selected === opt.key ? 'var(--accent)' : 'var(--background)',
-                  boxShadow: selected === opt.key ? '0 0 0 1px var(--ring)' : 'var(--shadow-border)',
-                  padding: '24px', cursor: opt.key === 'repo' ? 'not-allowed' : 'pointer',
-                  opacity: opt.key === 'repo' ? 0.5 : 1,
-                }}
-              >
-                <div style={{ color: 'var(--foreground)', marginBottom: 12 }}>{opt.icon}</div>
-                <p style={{ fontSize: 15, fontWeight: 600, color: 'var(--foreground)', margin: 0, letterSpacing: '-0.02em' }}>{opt.title}</p>
-                <p style={{ fontSize: 13, color: 'var(--muted-foreground)', margin: '6px 0 0', lineHeight: 1.5 }}>{opt.sub}</p>
-              </div>
-            ))}
+                { key: 'folder' as const, icon: <Folder size={24} />, title: 'Local Folder', sub: 'Upload a project folder from your machine.' },
+                { key: 'repo'   as const, icon: <GitBranch size={24} />, title: 'Repository', sub: 'Clone a remote repository.' },
+              ].map(opt => (
+                <div
+                  key={opt.key}
+                  onClick={() => opt.key === 'repo' ? handleConnectRepo() : setSelected(opt.key)}
+                  className="card"
+                  style={{
+                    background: selected === opt.key ? 'var(--accent)' : 'var(--background)',
+                    boxShadow: selected === opt.key ? '0 0 0 1px var(--ring)' : 'var(--shadow-border)',
+                    padding: '24px', cursor: 'pointer',
+                    opacity: 1,
+                  }}
+                >
+                  <div style={{ color: 'var(--foreground)', marginBottom: 12 }}>{opt.icon}</div>
+                  <p style={{ fontSize: 15, fontWeight: 600, color: 'var(--foreground)', margin: 0, letterSpacing: '-0.02em' }}>{opt.title}</p>
+                  <p style={{ fontSize: 13, color: 'var(--muted-foreground)', margin: '6px 0 0', lineHeight: 1.5 }}>{opt.sub}</p>
+                </div>
+              ))}
           </div>
 
           {/* Step 2a — Folder */}

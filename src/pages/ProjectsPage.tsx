@@ -368,16 +368,19 @@ const ProjectCard: React.FC<{
 
 interface ProjectsPageProps {
   onOpenProject: (id: string) => void
+  onNavigate?: (page: string, params?: any) => void
 }
 
-export const ProjectsPage: React.FC<ProjectsPageProps> = ({ onOpenProject }) => {
+export const ProjectsPage: React.FC<ProjectsPageProps> = ({ onOpenProject, onNavigate }) => {
   const [projects, setProjects] = useState<ProjectWithHealth[]>([])
   const [loading, setLoading] = useState(true)
   const [showModal, setShowModal] = useState(false)
   const [selectedProject, setSelectedProject] = useState<ProjectWithHealth | null>(null)
+  const [error, setError] = useState<string | null>(null)
 
   const loadProjects = async () => {
     setLoading(true)
+    setError(null)
     try {
       const p: Project[] = await getAllProjects()
 
@@ -419,8 +422,10 @@ export const ProjectsPage: React.FC<ProjectsPageProps> = ({ onOpenProject }) => 
       setProjects(enriched)
     } catch (e) {
       console.error(e)
+      setError('Failed to load projects: ' + (e instanceof Error ? e.message : 'Unknown error'))
+    } finally {
+      setLoading(false)
     }
-    setLoading(false)
   }
 
   useEffect(() => { loadProjects() }, [])
@@ -438,15 +443,29 @@ export const ProjectsPage: React.FC<ProjectsPageProps> = ({ onOpenProject }) => 
     <div style={{ padding: '32px 36px', height: '100%', overflowY: 'auto', boxSizing: 'border-box' }}>
       <style>{`@keyframes spin { to { transform: rotate(360deg) } } .spin { animation: spin 1s linear infinite; }`}</style>
 
-      {/* Header */}
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 28 }}>
-        <div>
-          <h1 className="page-title" style={{ marginBottom: 4, fontSize: 28 }}>Projects</h1>
-          <p style={{ fontSize: 14, color: 'var(--muted-foreground)' }}>{projects.length} projeto{projects.length !== 1 ? 's' : ''}</p>
-        </div>
-        <button className="btn btn-primary" onClick={() => setShowModal(true)}>
-          <Plus size={16} /> New Project
-        </button>
+       {error && (
+         <div style={{ 
+           background: 'rgba(255, 91, 79, 0.08)', 
+           border: '1px solid rgba(255, 91, 79, 0.18)', 
+           borderRadius: 10, 
+           color: '#ff7f76', 
+           fontSize: 13, 
+           lineHeight: 1.6, 
+           padding: '12px 14px', 
+           marginBottom: 16 
+         }}>
+           {error}
+         </div>
+       )}
+       {/* Header */}
+       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 28 }}>
+          <div>
+            <h1 className="page-title" style={{ marginBottom: 4, fontSize: 28 }}>Projects</h1>
+            <p style={{ fontSize: 14, color: 'var(--muted-foreground)' }}>{projects.length} projeto{projects.length !== 1 ? 's' : ''}</p>
+          </div>
+          <button className="btn btn-primary" onClick={() => setShowModal(true)}>
+            <Plus size={16} /> New Project
+          </button>
       </div>
 
       {loading ? (
@@ -520,6 +539,10 @@ export const ProjectsPage: React.FC<ProjectsPageProps> = ({ onOpenProject }) => 
             setProjects((prev: ProjectWithHealth[]) => [{ ...project }, ...prev])
             setShowModal(false)
             onOpenProject(project.id)
+          }}
+          onNavigate={(page, params) => {
+            setShowModal(false)
+            if (typeof (onNavigate as any) === 'function') (onNavigate as any)(page, params)
           }}
         />
       )}

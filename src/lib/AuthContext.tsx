@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useEffect, useState, useCallback } from 'react'
+import React, { createContext, useContext, useEffect, useState, useCallback, useRef } from 'react'
 import { Session } from '@supabase/supabase-js'
 import { H } from 'highlight.run'
 import { supabase, UserProfile } from './supabase'
@@ -38,29 +38,41 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [profile, setProfile] = useState<UserProfile | null>(null)
   const [loading, setLoading] = useState(true)
 
-  // Fetch profile from the users table
-  const fetchProfile = useCallback(async (userId: string): Promise<UserProfile | null> => {
-    const { data, error } = await supabase
-      .from('users')
-      .select('*')
-      .eq('id', userId)
-      .single()
+  // Garante que setLoading(false) corre só uma vez — independentemente de qual
+  // path (getSession vs onAuthStateChange) terminar primeiro.
+  const loadingDone = useRef(false)
+  const doneLoading = () => {
+    if (!loadingDone.current) {
+      loadingDone.current = true
+      setLoading(false)
+    }
+  }
 
-    if (error) {
-      console.warn('[auth] profile not found:', error.message)
-      setProfile(null)
-      return null
-    } else {
+  const fetchProfile = useCallback(async (userId: string): Promise<UserProfile | null> => {
+    try {
+      const { data, error } = await supabase
+        .from('users')
+        .select('*')
+        .eq('id', userId)
+        .single()
+
+      if (error) {
+        console.warn('[auth] profile not found:', error.message)
+        setProfile(null)
+        return null
+      }
       const nextProfile = data as UserProfile
       setProfile(nextProfile)
       return nextProfile
+    } catch (e) {
+      console.error('[auth] fetchProfile threw:', e)
+      setProfile(null)
+      return null
     }
   }, [])
 
   const refreshProfile = useCallback(async () => {
-    if (session?.user?.id) {
-      await fetchProfile(session.user.id)
-    }
+    if (session?.user?.id) await fetchProfile(session.user.id)
   }, [session, fetchProfile])
 
   const signOut = useCallback(async () => {
@@ -72,8 +84,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const signIn = useCallback(async (email: string, password: string) => {
     try {
       const { error } = await supabase.auth.signInWithPassword({ email, password })
-      if (error) return { error }
-      return { error: null }
+      return { error: error ?? null }
     } catch (err) {
       return { error: err instanceof Error ? err : new Error('Sign in failed') }
     }
@@ -81,14 +92,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const signUp = useCallback(async (email: string, password: string) => {
     try {
-      // Sign up with Supabase Auth
       const { data, error: signUpError } = await supabase.auth.signUp({ email, password })
       if (signUpError) return { error: signUpError }
-
       const user = data.user
       if (!user) return { error: new Error('No user returned from signup') }
 
-      // Create user profile record
       const { error: profileError } = await supabase.from('users').insert({
         id: user.id,
         auth_id: user.id,
@@ -99,12 +107,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         language: 'pt',
         avatar_url: null,
       })
-
-      if (profileError) {
-        console.warn('[auth] failed to create user profile:', profileError.message)
-        // Don't fail the signup, just warn
-      }
-
+      if (profileError) console.warn('[auth] failed to create user profile:', profileError.message)
       return { error: null }
     } catch (err) {
       return { error: err instanceof Error ? err : new Error('Sign up failed') }
@@ -115,61 +118,58 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     try {
       const { error } = await supabase.auth.signInWithOAuth({
         provider: 'github',
-        options: {
-          scopes: 'repo read:user',
-          redirectTo: window.location.origin,
-        },
+        options: { scopes: 'repo read:user', redirectTo: window.location.origin },
       })
-      if (error) return { error }
-      return { error: null }
+      return { error: error ?? null }
     } catch (err) {
       return { error: err instanceof Error ? err : new Error('GitHub sign in failed') }
     }
   }, [])
 
+  // Highlight identify
   useEffect(() => {
     if (!session?.user) return
-
     H.identify(session.user.email ?? session.user.id, {
       id: session.user.id,
       plan: profile?.plan ?? 'free',
     })
   }, [session, profile?.plan])
 
-  // ── Bootstrap: get existing session on mount ──
+  // ── Bootstrap ─────────────────────────────────────────────────────────────
   useEffect(() => {
+    // 1. Ler sessão do localStorage (síncrono na prática — sem rede)
     supabase.auth.getSession().then(async ({ data }) => {
       const s = data.session
       setSession(s)
-      try {
-        if (s?.user?.id) await fetchProfile(s.user.id)
-      } catch (e) {
-        console.error('[auth] failed to fetch profile during bootstrap:', e)
-      } finally {
-        setLoading(false)
-      }
+      if (s?.user?.id) await fetchProfile(s.user.id)
+      doneLoading() // ← garante que o loading termina mesmo se onAuthStateChange não disparar
+    }).catch(e => {
+      console.error('[auth] getSession failed:', e)
+      doneLoading()
     })
 
-    // Listen for Supabase auth state changes (email/password, social)
+    // 2. Ouvir mudanças futuras (login, logout, token refresh, OAuth redirect)
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, s) => {
       setSession(s)
+
       if (s?.user?.id) {
+        // Guardar github token se presente (OAuth)
         const providerToken = (s as Session & { provider_token?: string | null }).provider_token
         if (providerToken) {
           const { error } = await supabase
             .from('users')
             .update({ github_token: providerToken })
             .eq('id', s.user.id)
-
-          if (error) {
-            console.warn('[auth] failed to store github token:', error.message)
-          }
+          if (error) console.warn('[auth] failed to store github token:', error.message)
         }
 
         await fetchProfile(s.user.id)
       } else {
         setProfile(null)
       }
+
+      // Se o getSession ainda não terminou (ex: OAuth redirect), termina aqui
+      doneLoading()
     })
 
     return () => subscription.unsubscribe()

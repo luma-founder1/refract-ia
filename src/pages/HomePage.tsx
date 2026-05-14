@@ -40,14 +40,17 @@ export const HomePage: React.FC<HomePageProps> = ({ onNavigate }) => {
   const [projects, setProjects] = useState<Project[]>([])
   const [loading, setLoading] = useState(true)
   const [showModal, setShowModal] = useState(false)
+  const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
     const load = async () => {
       try {
+        setError(null);
         const p = await getRecentProjects()
         setProjects(p ?? [])
       } catch (err) {
         console.error('Failed to load home data:', err)
+        setError('Failed to load projects: ' + (err instanceof Error ? err.message : 'Unknown error'))
       } finally {
         setLoading(false)
       }
@@ -64,27 +67,41 @@ export const HomePage: React.FC<HomePageProps> = ({ onNavigate }) => {
         @keyframes fadeUp { from { opacity: 0; transform: translateY(12px) } to { opacity: 1; transform: translateY(0) } }
       `}</style>
 
-      {/* Hero Section */}
-      <div style={{ marginBottom: 96, animation: 'fadeUp 0.4s ease', maxWidth: 800 }}>
-        <h1 className="page-title" style={{ marginBottom: 24 }}>
-          {greeting()}
-        </h1>
-        <p style={{ 
-          fontSize: 24, 
-          color: 'var(--ink-muted)', 
-          lineHeight: 1.3, 
-          letterSpacing: '-0.01px', 
-          maxWidth: 600,
-          fontFamily: 'var(--font-sans)',
-          marginBottom: 32
-        }}>
-          {!loading && hasProjects
-            ? `You have ${projects.length} project${projects.length !== 1 ? 's' : ''} — ${analysedCount > 0 ? `${analysedCount} already refracted.` : 'none analysed yet.'}`
-            : !loading && !hasProjects
-            ? "No projects yet. Start by adding your first one."
-            : 'Loading your projects...'
-          }
-        </p>
+       {/* Hero Section */}
+       <div style={{ marginBottom: 96, animation: 'fadeUp 0.4s ease', maxWidth: 800 }}>
+         {error && (
+           <div style={{ 
+             background: 'rgba(255, 91, 79, 0.08)', 
+             border: '1px solid rgba(255, 91, 79, 0.18)', 
+             borderRadius: 10, 
+             color: '#ff7f76', 
+             fontSize: 13, 
+             lineHeight: 1.6, 
+             padding: '12px 14px', 
+             marginBottom: 16 
+           }}>
+             {error}
+           </div>
+         )}
+         <h1 className="page-title" style={{ marginBottom: 24 }}>
+           {greeting()}
+         </h1>
+         <p style={{ 
+           fontSize: 24, 
+           color: 'var(--ink-muted)', 
+           lineHeight: 1.3, 
+           letterSpacing: '-0.01px', 
+           maxWidth: 600,
+           fontFamily: 'var(--font-sans)',
+           marginBottom: 32
+         }}>
+           {!loading && hasProjects
+             ? `You have ${projects.length} project${projects.length !== 1 ? 's' : ''} — ${analysedCount > 0 ? `${analysedCount} already refracted.` : 'none analysed yet.'}`
+             : !loading && !hasProjects
+             ? "No projects yet. Start by adding your first one."
+             : 'Loading your projects...'
+           }
+         </p>
 
         {/* ── Quick actions — only appears if no projects ─────────────────── */}
         {!loading && !hasProjects && (
@@ -119,44 +136,32 @@ export const HomePage: React.FC<HomePageProps> = ({ onNavigate }) => {
               </div>
             ))
           ) : (
-            <>
-              {projects.slice(0, 5).map((p: Project) => (
-                <div
-                  key={p.id}
-                  onClick={() => onNavigate('project-view', { projectId: p.id })}
-                  className="card"
-                  style={{ cursor: 'pointer', display: 'flex', flexDirection: 'column', minHeight: 110, padding: '16px 20px' }}
-                >
-                  <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 10 }}>
-                    <span style={{ fontSize: 16, fontWeight: 600, letterSpacing: '-0.3px', color: 'var(--ink)' }}>{p.name}</span>
-                    <StatusBadge status={normalizeStatus(p.status)} />
-                  </div>
-                  <p style={{ fontSize: 13, color: 'var(--ink-muted)', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', marginBottom: 16 }}>
-                    {p.repo || p.path || ''}
-                  </p>
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 'auto' }}>
-                    <span className="badge badge-muted">
-                      <GitBranch size={11} /> {p.branch || 'main'}
-                    </span>
-                    <span style={{ fontSize: 12, color: 'var(--ink-muted)' }}>
-                      {p.last_run ? new Date(p.last_run).toLocaleDateString('en-US') : 'Never'}
-                    </span>
-                  </div>
-                </div>
-              ))}
-
-              {/* Add new */}
-              <button
-                onClick={() => setShowModal(true)}
-                className="card"
-                style={{ background: 'transparent', border: '1px dashed var(--hairline)', cursor: 'pointer', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 10, minHeight: 110, padding: '16px 20px' }}
-              >
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--ink)' }}>
-                  <Plus size={20} />
-                </div>
-                <span style={{ fontSize: 13, fontWeight: 500, color: 'var(--ink-muted)' }}>New project</span>
-              </button>
-            </>
+             <>
+               {projects.slice(0, 5).map((p: Project) => (
+                 <div
+                   key={p.id}
+                   onClick={() => onNavigate('project-view', { projectId: p.id })}
+                   className="card"
+                   style={{ cursor: 'pointer', display: 'flex', flexDirection: 'column', minHeight: 110, padding: '16px 20px' }}
+                 >
+                   <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 10 }}>
+                     <span style={{ fontSize: 16, fontWeight: 600, letterSpacing: '-0.3px', color: 'var(--ink)' }}>{p.name}</span>
+                     <StatusBadge status={normalizeStatus(p.status)} />
+                   </div>
+                   <p style={{ fontSize: 13, color: 'var(--ink-muted)', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', marginBottom: 16 }}>
+                     {p.repo || p.path || ''}
+                   </p>
+                   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 'auto' }}>
+                     <span className="badge badge-muted">
+                       <GitBranch size={11} /> {p.branch || 'main'}
+                     </span>
+                     <span style={{ fontSize: 12, color: 'var(--ink-muted)' }}>
+                       {p.last_run ? new Date(p.last_run).toLocaleDateString('en-US') : 'Never'}
+                     </span>
+                   </div>
+                 </div>
+               ))}
+             </>
           )}
         </div>
       </div>
@@ -197,6 +202,7 @@ export const HomePage: React.FC<HomePageProps> = ({ onNavigate }) => {
             setShowModal(false)
             onNavigate('project-view', { projectId: project.id })
           }}
+          onNavigate={onNavigate}
         />
       )}
     </div>

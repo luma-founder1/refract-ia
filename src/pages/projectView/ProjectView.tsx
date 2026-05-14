@@ -482,71 +482,71 @@ const [explanationCache, setExplanationCache] = useState<Record<string, string>>
     const issuePath = currentIssue.filePath;
     const issueProblem = currentIssue.problem;
 
-    async function getExplanation() {
-      try {
-        // TODO: Read file from uploaded files instead of disk
-        // For now, use empty string as file source
-        const fileSource = '';
-        const explanation = await explainIssue(currentIssue, fileSource);
-        setRequestError(null)
-        setIssueExplanation(explanation);
-        setExplanationCache(prev => ({ ...prev, [issueId]: explanation }));
-      } catch (err) {
-        H.consumeError(
-          err as Error,
-          'Failed to explain issue',
-          {
-            feature: 'analysis-explanation',
-            projectId: projectId ?? 'unknown',
-            issueId,
-          }
-        )
-        if (err instanceof RateLimitError) {
-          setRequestError(err.message)
-        }
-        setIssueExplanation(issueProblem);
-      } finally {
-        setLoadingExplanation(false);
-      }
-    }
+     async function getExplanation() {
+       try {
+         // Read file from uploaded files
+         const fileContent = getFileContentForIssue(currentIssue.filePath, fileMap);
+         const fileSource = fileContent ? fileContent.content : '';
+         const explanation = await explainIssue(currentIssue, fileSource);
+         setRequestError(null)
+         setIssueExplanation(explanation);
+         setExplanationCache(prev => ({ ...prev, [issueId]: explanation }));
+       } catch (err) {
+         H.consumeError(
+           err as Error,
+           'Failed to explain issue',
+           {
+             feature: 'analysis-explanation',
+             projectId: projectId ?? 'unknown',
+             issueId,
+           }
+         )
+         if (err instanceof RateLimitError) {
+           setRequestError(err.message)
+         }
+         setIssueExplanation(issueProblem);
+       } finally {
+         setLoadingExplanation(false);
+       }
+     }
     getExplanation();
   }, [currentIssue?.id])
 
-  // Auto-refactor when 'after' content is empty
-  useEffect(() => {
-    if (!currentIssue) return
-    const afterContent = currentIssue.patch?.after ?? currentIssue.lines.after.join('\n')
-    if (afterContent.trim() !== '') return
+     // Auto-refactor when 'after' content is empty
+   useEffect(() => {
+     if (!currentIssue) return
+     const afterContent = currentIssue.patch?.after ?? currentIssue.lines.after.join('\n')
+     if (afterContent.trim() !== '') return
 
-    setLoadingRefactor(true)
-    ;(async () => {
-      try {
-        // TODO: Read file from uploaded files instead of disk
-        // For now, use empty string as file source
-        const fileSource = '';
-        const newPatch = await refactorIssue(currentIssue, fileSource)
-        setRequestError(null)
-        updateIssueLines(currentIssue.id, newPatch)
-      } catch (err) {
-        H.consumeError(
-          err as Error,
-          'Failed to auto-refactor issue',
-          {
-            feature: 'analysis-refactor',
-            projectId: projectId ?? 'unknown',
-            issueId: currentIssue.id,
-            fileCount: String(fileMap.size),
-          }
-        )
-        if (err instanceof RateLimitError) {
-          setRequestError(err.message)
-        }
-        console.error('Auto-refactor failed', err)
-      } finally {
-        setLoadingRefactor(false)
-      }
-    })()
-  }, [currentIssue?.id]);
+     setLoadingRefactor(true)
+     ;(async () => {
+       try {
+         // Read file from uploaded files
+         const fileContent = getFileContentForIssue(currentIssue.filePath, fileMap);
+         const fileSource = fileContent ? fileContent.content : '';
+         const newPatch = await refactorIssue(currentIssue, fileSource)
+         setRequestError(null)
+         updateIssueLines(currentIssue.id, newPatch)
+       } catch (err) {
+         H.consumeError(
+           err as Error,
+           'Failed to auto-refactor issue',
+           {
+             feature: 'analysis-refactor',
+             projectId: projectId ?? 'unknown',
+             issueId: currentIssue.id,
+             fileCount: String(fileMap.size),
+           }
+         )
+         if (err instanceof RateLimitError) {
+           setRequestError(err.message)
+         }
+         console.error('Auto-refactor failed', err)
+       } finally {
+         setLoadingRefactor(false)
+       }
+     })()
+   }, [currentIssue?.id]);
 
   useEffect(() => {
     async function load() {

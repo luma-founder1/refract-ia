@@ -1,5 +1,20 @@
 // src/workers/analysis.worker.ts
-import { Project, Node, SyntaxKind, ts, SourceFile } from 'ts-morph'
+//
+// ⚠️  MIGRAÇÃO: ts-morph → @typescript-eslint/typescript-estree
+//
+// ts-morph usa APIs de Node.js (fs, path) e não funciona num Web Worker no browser.
+// @typescript-eslint/typescript-estree é um parser TypeScript puro que funciona
+// em qualquer ambiente JS, incluindo Web Workers.
+//
+// INSTALL (se ainda não tens):
+//   npm install @typescript-eslint/typescript-estree
+//   npm install --save-dev @types/node   (só para tipos, não é usado em runtime)
+
+import {
+  parse,
+  simpleTraverse,
+  TSESTree,
+} from '@typescript-eslint/typescript-estree'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -38,29 +53,6 @@ export interface AnalysisResult {
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
-const IGNORE = new Set([
-  'node_modules', '.git', 'dist', 'build', '.build', '.next',
-  'out', 'coverage', '.turbo', '.vercel', 'temp', 'tmp', '.asar',
-])
-
-const EFFORT: Record<string, 'low' | 'medium' | 'high'> = {
-  'any-type':            'low',
-  'console-log':         'low',
-  'missing-docs':        'low',
-  'generic-naming':      'low',
-  'dead-state':          'medium',
-  'effect-no-deps':      'medium',
-  'prop-drilling':       'medium',
-  'oversized-component': 'high',
-  'circular-dep':        'high',
-}
-
-const IMPACT_SCORE: Record<string, number> = { High: 3, Medium: 2, Low: 1 }
-const EFFORT_SCORE: Record<string, number> = { low: 1, medium: 2, high: 3 }
-
-const DEFAULT_MAX_FILES = 2000
-const DEFAULT_MAX_DEPTH = 15
-
 const GENERIC_NAMES = new Set([
   'data', 'item', 'items', 'list', 'temp', 'tmp', 'foo', 'bar', 'baz',
   'obj', 'object', 'val', 'value', 'res', 'result', 'response',
@@ -68,107 +60,159 @@ const GENERIC_NAMES = new Set([
   'Component', 'Page', 'Container', 'Wrapper', 'Inner', 'Outer',
 ])
 
-// ─── File utils ───────────────────────────────────────────────────────────────
-
-function getLines(source: string): string[] {
-  return source.split('\n')
+const EFFORT_MAP: Record<string, 'low' | 'medium' | 'high'> = {
+  'any-type': 'low', 'console-log': 'low', 'missing-docs': 'low',
+  'generic-naming': 'low', 'dead-state': 'medium', 'effect-no-deps': 'medium',
+  'prop-drilling': 'medium', 'oversized-component': 'high', 'circular-dep': 'high',
 }
 
-function makePatch(before: string[], after: string[]): { before: string; after: string } {
-  return { before: before.join('\n'), after: after.join('\n') }
+// ─── Parse helper ─────────────────────────────────────────────────────────────
+
+interface ParsedFile {
+  ast: TSESTree.Program
+  lines: string[]
+  filePath: string
+  fileName: string
+  isTsx: boolean
 }
 
-// Create an in-memory ts-morph Project from provided files
-function createTsMorphProject(files: Map<string, string>): Project {
-  const project = new Project({
-    useInMemoryFileSystem: true,
-    compilerOptions: {
-      target: ts.ScriptTarget.ESNext,
-      module: ts.ModuleKind.ESNext,
-      jsx: ts.JsxEmit.ReactJSX,
-      strict: true,
-      allowJs: true,
+function parseFile(filePath: string, content: string): ParsedFile | null {
+  const isTsx = /\.(tsx|jsx)$/.test(filePath)
+  const isTs  = /\.(ts|tsx|js|jsx)$/.test(filePath)
+  if (!isTs) return null
+
+  try {
+    const ast = parse(content, {
+      jsx: isTsx,
+      tolerant: true,     // não explode em erros de sintaxe — continua a analisar
+      loc: true,
+      range: false,
+      tokens: false,
+      comment: false,
+    })
+    return {
+      ast,
+      lines: content.split('\n'),
+      filePath,
+      fileName: filePath.replace(/\\/g, '/').split('/').pop() ?? filePath,
+      isTsx,
+    }
+  } catch {
+    // Ficheiro com sintaxe demasiado quebrada — salta
+    return null
+  }
+}
+
+// ─── Traverse helpers ─────────────────────────────────────────────────────────
+
+/** Caminha por todos os nós de um AST e chama o callback para cada tipo. */
+function walk(node: any, visitor: Record<string, (n: any) => void>) {
+  simpleTraverse(node as any, {
+    enter(n: any) {
+      const fn = visitor[n.type]
+      if (fn) fn(n)
     },
   })
-
-  for (const [filePath, content] of files) {
-    if (/\.(ts|tsx|js|jsx)$/.test(filePath)) {
-      project.createSourceFile(filePath, content, { overwrite: true })
-    }
-  }
-
-  return project
 }
 
-// ─── Detector: Any Types ──────────────────────────────────────────────────────
+/** Devolve todos os nós de um tipo específico dentro de um nó raiz. */
+function findAll(root: any, type: string): any[] {
+  const results: any[] = []
+  simpleTraverse(root as any, {
+    enter(n: any) {
+      if (n.type === type) results.push(n)
+    },
+  })
+  return results
+}
 
-function detectAnyTypes(sourceFile: SourceFile): Issue[] {
+function lineOf(node: TSESTree.Node): number {
+  return node.loc?.start.line ?? 1
+}
+function endLineOf(node: TSESTree.Node): number {
+  return node.loc?.end.line ?? 1
+}
+
+// ─── Detector: any types ──────────────────────────────────────────────────────
+
+function detectAnyTypes(pf: ParsedFile): Issue[] {
   const issues: Issue[] = []
-  const text = sourceFile.getFullText()
-  const lines = getLines(text)
+  const seen = new Set<number>()
 
-  sourceFile.getDescendantsOfKind(SyntaxKind.AnyKeyword).forEach(node => {
-    const line = node.getStartLineNumber()
-    const lineText = lines[line - 1] ?? ''
-    const fixed = lineText
-      .replace(/:\s*any\b/g, ': unknown')
-      .replace(/as\s+any\b/g, 'as unknown')
-      .replace(/<any>/g, '<unknown>')
-      .replace(/Array<any>/g, 'Array<unknown>')
-      .replace(/any\[\]/g, 'unknown[]')
+  walk(pf.ast, {
+    TSAnyKeyword(node) {
+      const line = lineOf(node)
+      if (seen.has(line)) return
+      seen.add(line)
 
-    issues.push({
-      id: `any-${sourceFile.getFilePath()}-${line}`,
-      file: sourceFile.getBaseName(),
-      filePath: sourceFile.getFilePath(),
-      category: 'any-type',
-      problem: 'Uso de `any` — substitui por um tipo concreto',
-      impact: 'Medium',
-      lineStart: line,
-      lineEnd: line,
-      lines: { before: [lineText], after: [fixed] },
-      patch: { before: lineText, after: fixed },
-    })
+      const lineText = pf.lines[line - 1] ?? ''
+      const fixed = lineText
+        .replace(/:\s*any\b/g, ': unknown')
+        .replace(/as\s+any\b/g, 'as unknown')
+        .replace(/<any>/g, '<unknown>')
+        .replace(/Array<any>/g, 'Array<unknown>')
+        .replace(/any\[\]/g, 'unknown[]')
+
+      issues.push({
+        id: `any-${pf.filePath}-${line}`,
+        file: pf.fileName,
+        filePath: pf.filePath,
+        category: 'any-type',
+        problem: 'Uso de `any` — substitui por um tipo concreto',
+        impact: 'Medium',
+        lineStart: line,
+        lineEnd: line,
+        lines: { before: [lineText], after: [fixed] },
+        patch: { before: lineText, after: fixed },
+      })
+    },
   })
 
   return issues
 }
 
-// ─── Detector: Dead useState ──────────────────────────────────────────────────
+// ─── Detector: dead useState ──────────────────────────────────────────────────
 
-function detectDeadState(sourceFile: SourceFile): Issue | null {
-  const calls = sourceFile.getDescendantsOfKind(SyntaxKind.CallExpression)
-    .filter(c => c.getExpression().getText() === 'useState')
-
+function detectDeadState(pf: ParsedFile): Issue | null {
+  // Encontrar declarações: const [x, setX] = useState(...)
   const stateDecls: Array<{ varName: string; line: number }> = []
 
-  for (const call of calls) {
-    const varDecl = call.getFirstAncestorByKind(SyntaxKind.VariableDeclaration)
-    if (!varDecl) continue
-    const nameNode = varDecl.getNameNode()
-    if (!Node.isArrayBindingPattern(nameNode)) continue
-    const first = (nameNode as any).getElements?.()[0]
-    const varName = first?.getText?.() ?? ''
-    if (!varName) continue
-    stateDecls.push({ varName, line: varDecl.getStartLineNumber() })
-  }
+  walk(pf.ast, {
+    VariableDeclarator(node) {
+      if (
+        !node.init ||
+        node.init.type !== 'CallExpression' ||
+        node.init.callee.type !== 'Identifier' ||
+        node.init.callee.name !== 'useState'
+      ) return
+
+      if (node.id.type !== 'ArrayPattern') return
+      const first = node.id.elements[0]
+      if (!first || first.type !== 'Identifier') return
+
+      stateDecls.push({ varName: first.name, line: lineOf(node) })
+    },
+  })
 
   if (stateDecls.length === 0) return null
 
-  const dead = stateDecls.filter(({ varName }) => {
-    const refs = sourceFile.getDescendantsOfKind(SyntaxKind.Identifier).filter(id => id.getText() === varName)
-    return refs.length <= 1
-  })
+  // Contar referências a cada variável no ficheiro inteiro
+  const allIdentifiers = findAll(pf.ast, 'Identifier')
+  const refCount = new Map<string, number>()
+  for (const id of allIdentifiers) {
+    refCount.set(id.name, (refCount.get(id.name) ?? 0) + 1)
+  }
 
+  // "Morto" = referenciado ≤ 1 vez (a própria declaração conta como 1)
+  const dead = stateDecls.filter(d => (refCount.get(d.varName) ?? 0) <= 1)
   if (dead.length === 0) return null
 
-  const lines = getLines(sourceFile.getFullText())
-  const deadLines = dead.map(d => lines[d.line - 1] ?? '')
+  const deadLines = dead.map(d => pf.lines[d.line - 1] ?? '')
 
   return {
-    id: `dead-state-${sourceFile.getFilePath()}`,
-    file: sourceFile.getBaseName(),
-    filePath: sourceFile.getFilePath(),
+    id: `dead-state-${pf.filePath}`,
+    file: pf.fileName,
+    filePath: pf.filePath,
     category: 'dead-state',
     problem: `${dead.length} estado(s) não usado(s): ${dead.map(d => d.varName).join(', ')}`,
     impact: 'Medium',
@@ -179,328 +223,432 @@ function detectDeadState(sourceFile: SourceFile): Issue | null {
   }
 }
 
-// ─── Detector: Missing JSDoc ──────────────────────────────────────────────────
+// ─── Detector: missing JSDoc ──────────────────────────────────────────────────
 
-function detectMissingDocs(sourceFile: SourceFile): Issue[] {
+function detectMissingDocs(pf: ParsedFile): Issue[] {
   const issues: Issue[] = []
-  const exported = sourceFile.getExportedDeclarations()
-  const full = sourceFile.getFullText()
-  const lines = getLines(full)
 
-  for (const [name, decls] of exported) {
-    for (const decl of decls) {
-      // Many declaration nodes expose getJsDocs()
-      const hasJs = (decl as any).getJsDocs?.()?.length > 0
-      if (hasJs) continue
-
-      let line = 1
-      try { line = decl.getStartLineNumber() } catch { line = 1 }
-      const code = lines[line - 1] ?? ''
-
-      issues.push({
-        id: `docs-${sourceFile.getFilePath()}-${line}`,
-        file: sourceFile.getBaseName(),
-        filePath: sourceFile.getFilePath(),
-        category: 'missing-docs',
-        problem: `Export \`${name}\` sem JSDoc`,
-        impact: 'Low',
-        lineStart: line,
-        lineEnd: line,
-        lines: { before: [code], after: [`/**`, ` * ${name} — descrição aqui`, ` */`, code] },
-        patch: { before: code, after: `/**\n * ${name} — descrição aqui\n */\n${code}` },
-      })
-    }
-  }
-
-  return issues
-}
-
-// ─── Detector: Oversized Component ───────────────────────────────────────────
-
-function detectOversized(sourceFile: SourceFile): Issue | null {
-  const path = sourceFile.getFilePath()
-  if (!/\.(tsx|jsx)$/.test(path)) return null
-
-  const full = sourceFile.getFullText()
-  const lines = getLines(full)
-
-  const fnNodes = [
-    ...sourceFile.getDescendantsOfKind(SyntaxKind.FunctionDeclaration),
-    ...sourceFile.getDescendantsOfKind(SyntaxKind.ArrowFunction),
-    ...sourceFile.getDescendantsOfKind(SyntaxKind.FunctionExpression),
-  ]
-
-  const large: Array<{ name: string; start: number; end: number; size: number }> = []
-
-  for (const fn of fnNodes) {
-    const size = fn.getEndLineNumber() - fn.getStartLineNumber()
-    if (size < 80) continue
-    const hasJsx = fn.getDescendantsOfKind(SyntaxKind.JsxElement).length > 0 || fn.getDescendantsOfKind(SyntaxKind.JsxFragment).length > 0 || fn.getDescendantsOfKind(SyntaxKind.JsxSelfClosingElement).length > 0
-    if (!hasJsx) continue
-    let name = 'Component'
-    try { name = (fn as any).getName?.() ?? name } catch {}
-    large.push({ name, start: fn.getStartLineNumber(), end: fn.getEndLineNumber(), size })
-  }
-
-  if (large.length === 0) {
-    if (lines.length < 200) return null
-    const preview = lines.slice(0, 12)
-    return {
-      id: `oversized-${path}`,
-      file: sourceFile.getBaseName(),
-      filePath: path,
-      category: 'oversized-component',
-      problem: `Ficheiro com ${lines.length} linhas — considera dividir em módulos`,
-      impact: lines.length > 300 ? 'High' : 'Medium',
-      lineStart: 1,
-      lineEnd: lines.length,
-      lines: { before: preview, after: [] },
-      patch: { before: '', after: '' },
-    }
-  }
-
-  const worst = large.sort((a, b) => b.size - a.size)[0]
-  const contextLines = lines.slice(worst.start - 1, Math.min(lines.length, worst.start + 10))
-  return {
-    id: `oversized-${path}`,
-    file: sourceFile.getBaseName(),
-    filePath: path,
-    category: 'oversized-component',
-    problem: `${worst.name} tem ${worst.size} linhas — divide em sub-componentes`,
-    impact: worst.size > 200 ? 'High' : 'Medium',
-    lineStart: worst.start,
-    lineEnd: worst.end,
-    lines: { before: contextLines, after: [] },
-    patch: { before: '', after: '' },
-  }
-}
-
-// ─── Detector: Console.log esquecido ─────────────────────────────────────────
-
-function detectConsoleLogs(sourceFile: SourceFile): Issue[] {
-  const issues: Issue[] = []
-  const lines = getLines(sourceFile.getFullText())
-
-  for (const call of sourceFile.getDescendantsOfKind(SyntaxKind.CallExpression)) {
-    const expr = call.getExpression()
-    if (!Node.isPropertyAccessExpression(expr)) continue
-    const obj = expr.getExpression().getText()
-    const name = expr.getName()
-    if (obj === 'console' && ['log', 'warn', 'debug', 'info'].includes(name)) {
-      const line = call.getStartLineNumber()
-      const lineText = lines[line - 1] ?? ''
-      issues.push({
-        id: `console-${sourceFile.getFilePath()}-${line}`,
-        file: sourceFile.getBaseName(),
-        filePath: sourceFile.getFilePath(),
-        category: 'console-log',
-        problem: `\`console.${name}\` esquecido — remove antes de produção`,
-        impact: 'Low',
-        lineStart: line,
-        lineEnd: line,
-        lines: { before: [lineText], after: [] },
-        patch: { before: lineText, after: '' },
-      })
-    }
-  }
-
-  return issues
-}
-
-// ─── Detector: useEffect sem dependency array ─────────────────────────────────
-
-function detectEffectNoDeps(sourceFile: SourceFile): Issue[] {
-  const path = sourceFile.getFilePath()
-  if (!/\.(tsx?|jsx?)$/.test(path)) return []
-  const issues: Issue[] = []
-  const lines = getLines(sourceFile.getFullText())
-
-  for (const call of sourceFile.getDescendantsOfKind(SyntaxKind.CallExpression)) {
-    const expr = call.getExpression()
-    if (expr.getText() === 'useEffect' && call.getArguments().length === 1) {
-      const line = call.getStartLineNumber()
-      const endLine = call.getEndLineNumber()
-      const context = lines[line - 1] ?? ''
-      issues.push({
-        id: `effect-no-deps-${path}-${line}`,
-        file: sourceFile.getBaseName(),
-        filePath: path,
-        category: 'effect-no-deps',
-        problem: 'useEffect sem dependency array — corre em cada render e causa loops',
-        impact: 'High',
-        lineStart: line,
-        lineEnd: endLine,
-        lines: { before: [context], after: [] },
-        patch: { before: '', after: '' },
-      })
-    }
-  }
-
-  return issues
-}
-
-// ─── Detector: Nomenclatura genérica ─────────────────────────────────────────
-
-function detectGenericNaming(sourceFile: SourceFile): Issue[] {
-  const issues: Issue[] = []
-  const seen = new Set<string>()
-  const lines = getLines(sourceFile.getFullText())
-
-  for (const v of sourceFile.getDescendantsOfKind(SyntaxKind.VariableDeclaration)) {
-    const name = v.getName()
-    if (GENERIC_NAMES.has(name)) {
-      const line = v.getStartLineNumber()
-      const key = `${name}-${line}`
-      if (seen.has(key)) continue
-      seen.add(key)
-      issues.push({
-        id: `naming-${sourceFile.getFilePath()}-${line}-${name}`,
-        file: sourceFile.getBaseName(),
-        filePath: sourceFile.getFilePath(),
-        category: 'generic-naming',
-        problem: `Nome genérico \`${name}\` — usa um nome que descreva o propósito`,
-        impact: 'Low',
-        lineStart: line,
-        lineEnd: line,
-        lines: { before: [lines[line - 1] ?? ''], after: [] },
-      })
-    }
-  }
-
-  // Props destructuring
-  for (const objPat of sourceFile.getDescendantsOfKind(SyntaxKind.ObjectBindingPattern)) {
-    for (const elem of (objPat as any).getElements?.() ?? []) {
-      const name = elem.getName?.() ?? elem.getText()
-      if (!GENERIC_NAMES.has(name)) continue
-      const line = elem.getStartLineNumber()
-      const key = `prop-${name}-${line}`
-      if (seen.has(key)) continue
-      seen.add(key)
-      issues.push({
-        id: `naming-prop-${sourceFile.getFilePath()}-${line}-${name}`,
-        file: sourceFile.getBaseName(),
-        filePath: sourceFile.getFilePath(),
-        category: 'generic-naming',
-        problem: `Prop genérica \`${name}\` — renomeia para descrever o dado`,
-        impact: 'Low',
-        lineStart: line,
-        lineEnd: line,
-        lines: { before: [lines[line - 1] ?? ''], after: [] },
-      })
-    }
-  }
-
-  return issues
-}
-
-// ─── Detector: Prop drilling ────────────────────────────────────────────────
-
-function detectPropDrilling(sourceFile: SourceFile): Issue[] {
-  const issues: Issue[] = []
-  const reported = new Set<string>()
-  const lines = getLines(sourceFile.getFullText())
-
-  const candidates = [
-    ...sourceFile.getDescendantsOfKind(SyntaxKind.FunctionDeclaration),
-    ...sourceFile.getDescendantsOfKind(SyntaxKind.VariableDeclaration),
-  ]
-
-  for (const node of candidates) {
+  for (const node of pf.ast.body) {
     let name = ''
-    let fnNode: any = null
+    let line = 0
 
-    if (Node.isFunctionDeclaration(node) && node.getName && node.getName()) {
-      name = node.getName()!
-      fnNode = node
-    } else if (Node.isVariableDeclaration(node)) {
-      const init = node.getInitializer()
-      if (init && (Node.isArrowFunction(init) || Node.isFunctionExpression(init))) {
-        name = node.getName()
-        fnNode = init
+    if (node.type === 'ExportNamedDeclaration' && node.declaration) {
+      const decl = node.declaration
+      if (decl.type === 'FunctionDeclaration' && decl.id) {
+        name = (decl as any).id?.name ?? '';
+        line = lineOf(node)
+      } else if (decl.type === 'VariableDeclaration') {
+        for (const d of decl.declarations) {
+          if (d.id.type === 'Identifier') {
+            name = (d.id as any).name ?? '';
+            line = lineOf(node)
+          }
+        }
+      } else if (
+        decl.type === 'TSInterfaceDeclaration' ||
+        decl.type === 'TSTypeAliasDeclaration'
+      ) {
+        name = (decl as any).id?.name ?? 'unknown'; line = lineOf(node)
       }
+    } else if (node.type === 'ExportDefaultDeclaration') {
+      name = 'default'; line = lineOf(node)
     }
 
-    if (!fnNode || !/^[A-Z]/.test(name)) continue
+    if (!name || !line) continue
 
-    const hasJsx = fnNode.getDescendantsOfKind(SyntaxKind.JsxElement).length > 0 || fnNode.getDescendantsOfKind(SyntaxKind.JsxFragment).length > 0
-    if (!hasJsx) continue
+    // Verifica se as 3 linhas acima têm bloco JSDoc
+    const prevLines = pf.lines.slice(Math.max(0, line - 4), line - 1)
+    const hasJsDoc = prevLines.some(l => l.trim().startsWith('*') || l.trim() === '*/')
+    if (hasJsDoc) continue
 
-    const param = fnNode.getParameters?.()?.[0]
-    if (!param) continue
-
-    let propCount = 0
-    let forwardsProps = false
-
-    if (Node.isIdentifier(param.getNameNode?.())) {
-      const propSource = param.getName()
-      const uniqueProps = new Set<string>()
-      for (const pa of fnNode.getDescendantsOfKind(SyntaxKind.PropertyAccessExpression)) {
-        const obj = pa.getExpression().getText()
-        const prop = pa.getName()
-        if (obj === propSource) uniqueProps.add(prop)
-      }
-      for (const sp of fnNode.getDescendantsOfKind(SyntaxKind.JsxSpreadAttribute)) {
-        const arg = sp.getExpression()?.getText?.() ?? ''
-        if (arg === propSource) forwardsProps = true
-      }
-      propCount = uniqueProps.size
-    } else {
-      // object pattern
-      const elems = param.getDescendantsOfKind(SyntaxKind.BindingElement)
-      const unique = new Set<string>()
-      for (const e of elems) {
-        unique.add(e.getName?.() ?? e.getText())
-      }
-      propCount = unique.size
-      forwardsProps = propCount >= 4
-    }
-
-    if (propCount < 4 && !forwardsProps) continue
-
-    const key = `${sourceFile.getFilePath()}-${fnNode.getStartLineNumber()}-${name}`
-    if (reported.has(key)) continue
-    reported.add(key)
-
-    const context = lines.slice(Math.max(0, fnNode.getStartLineNumber() - 1), Math.min(lines.length, fnNode.getStartLineNumber() + 4))
+    const code = pf.lines[line - 1] ?? ''
     issues.push({
-      id: `prop-drilling-${sourceFile.getFilePath()}-${fnNode.getStartLineNumber()}`,
-      file: sourceFile.getBaseName(),
-      filePath: sourceFile.getFilePath(),
-      category: 'prop-drilling',
-      problem: forwardsProps
-        ? `Provável prop drilling em \`${name}\` — recebe ${propCount} prop(s) e encaminha props para filhos`
-        : `\`${name}\` recebe ${propCount} prop(s) — considera reduzir a superfície de props`,
-      impact: propCount >= 6 ? 'Medium' : 'Low',
-      lineStart: fnNode.getStartLineNumber(),
-      lineEnd: fnNode.getEndLineNumber(),
-      lines: { before: context, after: [] },
-      patch: { before: context.join('\n'), after: '' },
+      id: `docs-${pf.filePath}-${line}`,
+      file: pf.fileName,
+      filePath: pf.filePath,
+      category: 'missing-docs',
+      problem: `Export \`${name}\` sem JSDoc`,
+      impact: 'Low',
+      lineStart: line,
+      lineEnd: line,
+      lines: { before: [code], after: ['/**', ` * ${name} — descrição aqui`, ' */', code] },
+      patch: { before: code, after: `/**\n * ${name} — descrição aqui\n */\n${code}` },
     })
   }
 
   return issues
 }
 
-// ─── Detector: Dependências circulares ───────────────────────────────────────
+// ─── Detector: oversized component ───────────────────────────────────────────
 
-function detectCircularDeps(project: Project): Issue[] {
-  const importMap = new Map<string, string[]>()
-  for (const sf of project.getSourceFiles()) {
-    const deps = sf.getImportDeclarations()
-      .map(imp => imp.getModuleSpecifierSourceFile()?.getFilePath())
-      .filter(Boolean) as string[]
-    importMap.set(sf.getFilePath(), deps)
+function detectOversized(pf: ParsedFile): Issue | null {
+  if (!pf.isTsx) return null
+
+  const totalLines = pf.lines.length
+  const candidates: Array<{ name: string; start: number; end: number; size: number }> = []
+
+  function checkFn(
+    node: TSESTree.FunctionDeclaration | TSESTree.ArrowFunctionExpression | TSESTree.FunctionExpression,
+    name: string,
+  ) {
+    const size = endLineOf(node) - lineOf(node)
+    if (size < 80) return
+    const hasJsx = findAll(node, 'JSXElement').length > 0 || findAll(node, 'JSXFragment').length > 0
+    if (!hasJsx) return
+    candidates.push({ name, start: lineOf(node), end: endLineOf(node), size })
   }
 
+  walk(pf.ast, {
+    FunctionDeclaration(node) { checkFn(node, (node.id as any)?.name ?? 'Component') },
+    ArrowFunctionExpression(node) { checkFn(node, 'Component') },
+    FunctionExpression(node) { checkFn(node, 'Component') },
+  })
+
+  // Para arrow functions, tentar recuperar o nome da variável
+  walk(pf.ast, {
+    VariableDeclarator(node) {
+      if (node.id.type !== 'Identifier') return
+      if (!node.init) return
+      if (
+        node.init.type === 'ArrowFunctionExpression' ||
+        node.init.type === 'FunctionExpression'
+      ) {
+        const size = endLineOf(node.init) - lineOf(node.init)
+        if (size < 80) return
+        const hasJsx = findAll(node.init, 'JSXElement').length > 0 || findAll(node.init, 'JSXFragment').length > 0
+        if (!hasJsx) return
+        // Corrigir o nome no candidato que já foi adicionado (mesmo lineOf)
+        const existing = candidates.find(c => c.start === lineOf(node.init))
+        if (existing && existing.name === 'Component') existing.name = (node.id as any)?.name
+      }
+    },
+  })
+
+  if (candidates.length === 0) {
+    if (totalLines < 200) return null
+    const preview = pf.lines.slice(0, 12)
+    return {
+      id: `oversized-${pf.filePath}`,
+      file: pf.fileName,
+      filePath: pf.filePath,
+      category: 'oversized-component',
+      problem: `Ficheiro com ${totalLines} linhas — considera dividir em módulos`,
+      impact: totalLines > 300 ? 'High' : 'Medium',
+      lineStart: 1,
+      lineEnd: totalLines,
+      lines: { before: preview, after: [] },
+      patch: { before: '', after: '' },
+    }
+  }
+
+  const worst = candidates.sort((a, b) => b.size - a.size)[0]
+  const context = pf.lines.slice(worst.start - 1, Math.min(pf.lines.length, worst.start + 10))
+
+  return {
+    id: `oversized-${pf.filePath}`,
+    file: pf.fileName,
+    filePath: pf.filePath,
+    category: 'oversized-component',
+    problem: `${worst.name} tem ${worst.size} linhas — divide em sub-componentes`,
+    impact: worst.size > 200 ? 'High' : 'Medium',
+    lineStart: worst.start,
+    lineEnd: worst.end,
+    lines: { before: context, after: [] },
+    patch: { before: '', after: '' },
+  }
+}
+
+// ─── Detector: console.log ────────────────────────────────────────────────────
+
+function detectConsoleLogs(pf: ParsedFile): Issue[] {
+  const issues: Issue[] = []
+
+  walk(pf.ast, {
+    CallExpression(node) {
+      if (
+        node.callee.type !== 'MemberExpression' ||
+        node.callee.object.type !== 'Identifier' ||
+        node.callee.object.name !== 'console' ||
+        node.callee.property.type !== 'Identifier'
+      ) return
+
+      const method = node.callee.property.name
+      if (!['log', 'warn', 'debug', 'info'].includes(method)) return
+
+      const line = lineOf(node)
+      const lineText = pf.lines[line - 1] ?? ''
+
+      issues.push({
+        id: `console-${pf.filePath}-${line}`,
+        file: pf.fileName,
+        filePath: pf.filePath,
+        category: 'console-log',
+        problem: `\`console.${method}\` esquecido — remove antes de produção`,
+        impact: 'Low',
+        lineStart: line,
+        lineEnd: line,
+        lines: { before: [lineText], after: [] },
+        patch: { before: lineText, after: '' },
+      })
+    },
+  })
+
+  return issues
+}
+
+// ─── Detector: useEffect sem deps ───────────────────────────────────────────
+
+function detectEffectNoDeps(pf: ParsedFile): Issue[] {
+  const issues: Issue[] = []
+
+  walk(pf.ast, {
+    CallExpression(node) {
+      if (
+        node.callee.type !== 'Identifier' ||
+        node.callee.name !== 'useEffect'
+      ) return
+
+      if (node.arguments.length !== 1) return
+
+      const line = lineOf(node)
+      const endLine = endLineOf(node)
+
+      issues.push({
+        id: `effect-no-deps-${pf.filePath}-${line}`,
+        file: pf.fileName,
+        filePath: pf.filePath,
+        category: 'effect-no-deps',
+        problem: 'useEffect sem dependency array — corre em cada render e causa loops',
+        impact: 'High',
+        lineStart: line,
+        lineEnd: endLine,
+        lines: { before: [pf.lines[line - 1] ?? ''], after: [] },
+        patch: { before: '', after: '' },
+      })
+    },
+  })
+
+  return issues
+}
+
+// ─── Detector: generic naming ─────────────────────────────────────────────────
+
+function detectGenericNaming(pf: ParsedFile): Issue[] {
+  const issues: Issue[] = []
+  const seen = new Set<string>()
+
+  walk(pf.ast, {
+    VariableDeclarator(node) {
+      if (node.id.type !== 'Identifier') return
+      const name = node.id.name
+      if (!GENERIC_NAMES.has(name)) return
+      const line = lineOf(node)
+      const key = `${name}-${line}`
+      if (seen.has(key)) return
+      seen.add(key)
+
+      issues.push({
+        id: `naming-${pf.filePath}-${line}-${name}`,
+        file: pf.fileName,
+        filePath: pf.filePath,
+        category: 'generic-naming',
+        problem: `Nome genérico \`${name}\` — usa um nome que descreva o propósito`,
+        impact: 'Low',
+        lineStart: line,
+        lineEnd: line,
+        lines: { before: [pf.lines[line - 1] ?? ''], after: [] },
+      })
+    },
+  })
+
+  walk(pf.ast, {
+    ObjectPattern(node) {
+      for (const prop of node.properties) {
+        if (prop.type !== 'Property') continue
+        const val = prop.value
+        if (val.type !== 'Identifier') continue
+        const name = val.name
+        if (!GENERIC_NAMES.has(name)) continue
+        const line = lineOf(prop)
+        const key = `prop-${name}-${line}`
+        if (seen.has(key)) return
+        seen.add(key)
+
+        issues.push({
+          id: `naming-prop-${pf.filePath}-${line}-${name}`,
+          file: pf.fileName,
+          filePath: pf.filePath,
+          category: 'generic-naming',
+          problem: `Prop genérica \`${name}\` — renomeia para descrever o dado`,
+          impact: 'Low',
+          lineStart: line,
+          lineEnd: line,
+          lines: { before: [pf.lines[line - 1] ?? ''], after: [] },
+        })
+      }
+    },
+  })
+
+  return issues
+}
+
+// ─── Detector: prop drilling ──────────────────────────────────────────────────
+
+function detectPropDrilling(pf: ParsedFile): Issue[] {
+  const issues: Issue[] = []
+  const reported = new Set<string>()
+
+  function checkFn(
+    fnNode: TSESTree.FunctionDeclaration | TSESTree.ArrowFunctionExpression | TSESTree.FunctionExpression,
+    name: string,
+  ) {
+    if (!/^[A-Z]/.test(name)) return
+    const hasJsx = findAll(fnNode, 'JSXElement').length > 0 || findAll(fnNode, 'JSXFragment').length > 0
+    if (!hasJsx) return
+
+    const param = fnNode.params[0]
+    if (!param) return
+
+    let propCount = 0
+    let forwardsProps = false
+
+    if (param.type === 'Identifier') {
+      const propName = param.name
+      const accesses = new Set<string>()
+      findAll(fnNode, 'MemberExpression').forEach(me => {
+        if (
+          me.object.type === 'Identifier' &&
+          me.object.name === propName &&
+          me.property.type === 'Identifier'
+        ) accesses.add(me.property.name)
+      })
+      propCount = accesses.size
+      findAll(fnNode, 'JSXSpreadAttribute').forEach(sa => {
+        if (sa.argument.type === 'Identifier' && sa.argument.name === propName) forwardsProps = true
+      })
+    } else if (param.type === 'ObjectPattern') {
+      const names = new Set<string>()
+      for (const p of param.properties) {
+        if (p.type === 'RestElement') { forwardsProps = true; continue }
+        if (p.type === 'Property' && p.value.type === 'Identifier') names.add(p.value.name)
+      }
+      propCount = names.size
+      if (propCount >= 4) forwardsProps = true
+    }
+
+    if (propCount < 4 && !forwardsProps) return
+
+    const key = `${pf.filePath}-${lineOf(fnNode)}-${name}`
+    if (reported.has(key)) return
+    reported.add(key)
+
+    const context = pf.lines.slice(
+      Math.max(0, lineOf(fnNode) - 1),
+      Math.min(pf.lines.length, lineOf(fnNode) + 4),
+    )
+
+    issues.push({
+      id: `prop-drilling-${pf.filePath}-${lineOf(fnNode)}`,
+      file: pf.fileName,
+      filePath: pf.filePath,
+      category: 'prop-drilling',
+      problem: forwardsProps
+        ? `Provável prop drilling em \`${name}\` — recebe ${propCount} prop(s) e encaminha para filhos`
+        : `\`${name}\` recebe ${propCount} prop(s) — considera reduzir a superfície de props`,
+      impact: propCount >= 6 ? 'Medium' : 'Low',
+      lineStart: lineOf(fnNode),
+      lineEnd: endLineOf(fnNode),
+      lines: { before: context, after: [] },
+      patch: { before: context.join('\n'), after: '' },
+    })
+  }
+
+  walk(pf.ast, {
+    FunctionDeclaration(node) {
+      if (node.id) checkFn(node, node.id.name)
+    },
+  })
+
+  walk(pf.ast, {
+    VariableDeclarator(node) {
+      if (node.id.type !== 'Identifier') return
+      const name = node.id.name
+      if (!node.init) return
+      if (
+        node.init.type === 'ArrowFunctionExpression' ||
+        node.init.type === 'FunctionExpression'
+      ) checkFn(node.init, name)
+    },
+  })
+
+  return issues
+}
+
+// ─── Detector: circular deps ──────────────────────────────────────────────────
+
+function buildImportMap(files: Map<string, string>): Map<string, string[]> {
+  const importMap = new Map<string, string[]>()
+
+  for (const [filePath, content] of files) {
+    if (!/\.(ts|tsx|js|jsx)$/.test(filePath)) continue
+    const parsed = parseFile(filePath, content)
+    if (!parsed) continue
+
+    const deps: string[] = []
+
+    for (const node of parsed.ast.body) {
+      if (
+        node.type !== 'ImportDeclaration' &&
+        node.type !== 'ExportNamedDeclaration' &&
+        node.type !== 'ExportAllDeclaration'
+      ) continue
+
+      const source = (node as any).source?.value
+      if (typeof source !== 'string' || !source.startsWith('.')) continue
+
+      const dir = filePath.replace(/\\/g, '/').split('/').slice(0, -1).join('/')
+      const resolved = resolveRelative(dir, source, files)
+      if (resolved) deps.push(resolved)
+    }
+
+    importMap.set(filePath, deps)
+  }
+
+  return importMap
+}
+
+function resolveRelative(dir: string, spec: string, files: Map<string, string>): string | null {
+  const joined = dir ? `${dir}/${spec}` : spec
+  const normalized = normalizePath(joined)
+  const exts = ['', '.ts', '.tsx', '.js', '.jsx', '/index.ts', '/index.tsx', '/index.js']
+  for (const ext of exts) {
+    if (files.has(normalized + ext)) return normalized + ext
+  }
+  return null
+}
+
+function normalizePath(p: string): string {
+  const parts = p.replace(/\\/g, '/').split('/')
+  const out: string[] = []
+  for (const part of parts) {
+    if (part === '..') out.pop()
+    else if (part !== '.') out.push(part)
+  }
+  return out.join('/')
+}
+
+function detectCircularDeps(files: Map<string, string>): Issue[] {
+  const importMap = buildImportMap(files)
   const issues: Issue[] = []
   const reported = new Set<string>()
 
   function findCycle(start: string, current: string, visited: Set<string>): string[] | null {
     if (current === start && visited.size > 0) return [current]
     if (visited.has(current)) return null
-    visited.add(current)
+    const next = new Set(visited)
+    next.add(current)
     for (const dep of importMap.get(current) ?? []) {
-      const cycle = findCycle(start, dep, new Set(visited))
+      const cycle = findCycle(start, dep, next)
       if (cycle) return [current, ...cycle]
     }
     return null
@@ -512,12 +660,14 @@ function detectCircularDeps(project: Project): Issue[] {
     const key = [...cycle].sort().join('|')
     if (reported.has(key)) continue
     reported.add(key)
+
+    const shortNames = cycle.map(f => f.replace(/\\/g, '/').split('/').pop() ?? f)
     issues.push({
       id: `circular-${key.slice(0, 60)}`,
-      file: file.split('/').pop() ?? file,
+      file: file.replace(/\\/g, '/').split('/').pop() ?? file,
       filePath: file,
       category: 'circular-dep',
-      problem: `Dependência circular: ${cycle.map(f => f.split('/').pop()).join(' → ')}`,
+      problem: `Dependência circular: ${shortNames.join(' → ')}`,
       impact: 'High',
       lineStart: 1,
       lineEnd: 1,
@@ -529,67 +679,9 @@ function detectCircularDeps(project: Project): Issue[] {
   return issues
 }
 
-// ─── Main ─────────────────────────────────────────────────────────────────────
+// ─── Enrich ───────────────────────────────────────────────────────────────────
 
-export async function runAnalysis(
-  files: Map<string, string>,
-  onProgress?: (file: string) => void,
-  opts: { maxFiles?: number; maxDepth?: number } = {}
-): Promise<AnalysisResult> {
-  const maxFiles = opts.maxFiles ?? DEFAULT_MAX_FILES
-  const project = createTsMorphProject(files)
-  const issues: Issue[] = []
-  const sourceFiles = project.getSourceFiles()
-
-  for (const sourceFile of sourceFiles) {
-    onProgress?.(sourceFile.getFilePath())
-
-    issues.push(
-      ...detectAnyTypes(sourceFile),
-      ...detectConsoleLogs(sourceFile),
-      ...detectEffectNoDeps(sourceFile),
-      ...detectMissingDocs(sourceFile),
-      ...(detectDeadState(sourceFile) ? [detectDeadState(sourceFile)!] : []),
-      ...(detectOversized(sourceFile) ? [detectOversized(sourceFile)!] : []),
-      ...detectPropDrilling(sourceFile),
-      ...detectGenericNaming(sourceFile),
-    )
-  }
-
-  // Dependências circulares via ts-morph
-  issues.push(...detectCircularDeps(project))
-
-  // Enriquecer com effort, blastRadius, priority
-  const enriched = enrichIssues(issues, project)
-
-  return {
-    projectPath: '',
-    scannedFiles: sourceFiles.map(f => f.getFilePath()),
-    issues: enriched,
-    summary: {
-      total: enriched.length,
-      high: enriched.filter(i => i.impact === 'High').length,
-      medium: enriched.filter(i => i.impact === 'Medium').length,
-      low: enriched.filter(i => i.impact === 'Low').length,
-    },
-  }
-}
-
-function enrichIssues(issues: Issue[], project: Project): Issue[] {
-  const reverseMap = new Map<string, number>()
-  for (const sourceFile of project.getSourceFiles()) {
-    for (const imp of sourceFile.getImportDeclarations()) {
-      const target = imp.getModuleSpecifierSourceFile()?.getFilePath()
-      if (target) reverseMap.set(target, (reverseMap.get(target) ?? 0) + 1)
-    }
-  }
-
-  const EFFORT_MAP: Record<string, 'low' | 'medium' | 'high'> = {
-    'any-type': 'low', 'console-log': 'low', 'missing-docs': 'low',
-    'generic-naming': 'low', 'dead-state': 'medium', 'effect-no-deps': 'medium',
-    'prop-drilling': 'medium', 'oversized-component': 'high', 'circular-dep': 'high',
-  }
-
+function enrichIssues(issues: Issue[], reverseMap: Map<string, number>): Issue[] {
   return issues.map(issue => {
     const effort = EFFORT_MAP[issue.category] ?? 'medium'
     const blastRadius = reverseMap.get(issue.filePath) ?? 0
@@ -600,17 +692,73 @@ function enrichIssues(issues: Issue[], project: Project): Issue[] {
   })
 }
 
-// Worker message handler
-self.onmessage = async (e: MessageEvent) => {
-  const { files: filesObj, opts } = e.data
+// ─── Main ─────────────────────────────────────────────────────────────────────
 
-  // Deserialize plain object back to Map
-  const filesMap = new Map<string, string>(Object.entries(filesObj))
+export async function runAnalysis(
+  files: Map<string, string>,
+  onProgress?: (file: string) => void,
+): Promise<AnalysisResult> {
+  const issues: Issue[] = []
+  const scannedFiles: string[] = []
+
+  // Reverse import map para blastRadius
+  const importMap = buildImportMap(files)
+  const reverseMap = new Map<string, number>()
+  for (const deps of importMap.values()) {
+    for (const dep of deps) {
+      reverseMap.set(dep, (reverseMap.get(dep) ?? 0) + 1)
+    }
+  }
+
+  for (const [filePath, content] of files) {
+    const pf = parseFile(filePath, content)
+    if (!pf) continue
+
+    onProgress?.(filePath)
+    scannedFiles.push(filePath)
+
+    issues.push(...detectAnyTypes(pf))
+    issues.push(...detectConsoleLogs(pf))
+    issues.push(...detectEffectNoDeps(pf))
+    issues.push(...detectMissingDocs(pf))
+    issues.push(...detectGenericNaming(pf))
+    issues.push(...detectPropDrilling(pf))
+
+    const deadState = detectDeadState(pf)
+    if (deadState) issues.push(deadState)
+
+    const oversized = detectOversized(pf)
+    if (oversized) issues.push(oversized)
+  }
+
+  issues.push(...detectCircularDeps(files))
+
+  const enriched = enrichIssues(issues, reverseMap)
+
+  return {
+    projectPath: '',
+    scannedFiles,
+    issues: enriched,
+    summary: {
+      total: enriched.length,
+      high: enriched.filter(i => i.impact === 'High').length,
+      medium: enriched.filter(i => i.impact === 'Medium').length,
+      low: enriched.filter(i => i.impact === 'Low').length,
+    },
+  }
+}
+
+// ─── Worker message handler ───────────────────────────────────────────────────
+// Contrato idêntico ao anterior — ProjectView.tsx não precisa de mudanças.
+
+self.onmessage = async (e: MessageEvent) => {
+  const { files: filesObj } = e.data
+  const filesMap = new Map<string, string>(Object.entries(filesObj ?? {}))
 
   try {
     const result = await runAnalysis(filesMap, (file: string) => {
       self.postMessage({ type: 'progress', file })
-    }, opts)
+    })
     self.postMessage({ type: 'success', result })
   } catch (error) {
     self.postMessage({ type: 'error', error: String(error) })
