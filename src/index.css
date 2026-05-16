@@ -5,7 +5,7 @@
 @tailwind components;
 @tailwind utilities;
 
-/* ─── Cursor Design Tokens ──────────────────────────────── */
+/* ─── Cursor Design Tokens — Light Mode (default) ──────────────────────────── */
 :root {
   /* Brand */
   --primary: #f54e00;
@@ -40,6 +40,64 @@
   /* Semantic */
   --semantic-success: #1f8a65;
   --semantic-error: #cf2d56;
+
+  /* Tailwind mapping */
+  --background: var(--canvas);
+  --foreground: var(--ink);
+  --card: var(--surface-card);
+  --card-foreground: var(--ink);
+  --popover: var(--surface-card);
+  --popover-foreground: var(--ink);
+  --muted: var(--surface-strong);
+  --muted-foreground: var(--ink-muted);
+  --accent: var(--canvas-soft);
+  --accent-foreground: var(--ink);
+  --border: var(--hairline);
+  --input: var(--surface-card);
+  --ring: var(--primary);
+  --radius: 8px;
+
+  /* Fonts */
+  --font-display: "Inter", system-ui, 'Helvetica Neue', Helvetica, Arial, sans-serif;
+  --font-sans: "Inter", system-ui, 'Helvetica Neue', Helvetica, Arial, sans-serif;
+  --font-mono: "JetBrains Mono", "Fira Code", monospace;
+}
+
+/* ─── Cursor Design Tokens — Dark Mode ─────────────────────────────────────── */
+[data-theme="dark"] {
+  /* Brand */
+  --primary: #f54e00;
+  --primary-active: #ff6a22;
+  --on-primary: #ffffff;
+
+  /* Surface */
+  --canvas: #0a0a09;
+  --canvas-soft: #111110;
+  --surface-card: #1a1a19;
+  --surface-strong: #2a2a28;
+
+  /* Ink / Text */
+  --ink: #f0efe8;
+  --ink-muted: #8a8880;
+  --ink-muted-soft: #6a6860;
+  --body: #a09c92;
+  --body-strong: #f0efe8;
+
+  /* Hairlines */
+  --hairline: #2a2a28;
+  --hairline-soft: #222220;
+  --hairline-strong: #3a3a38;
+
+  /* Timeline (AI-action signature) */
+  --timeline-thinking: #dfa88f;
+  --timeline-grep: #9fc9a2;
+  --timeline-read: #9fbbe0;
+  --timeline-edit: #c0a8dd;
+  --timeline-done: #c08532;
+
+  /* Semantic */
+  --semantic-success: #22c55e;
+  --semantic-error: #ef4444;
 
   /* Tailwind mapping */
   --background: var(--canvas);
@@ -103,6 +161,7 @@ body {
   letter-spacing: 0;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  transition: background 0.2s ease, color 0.2s ease;
 }
 
 /* ─── Typography ─────────────────────────────────────────── */

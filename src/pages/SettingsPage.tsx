@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react'
-import { Check, ChevronRight, Globe, Loader2, LogOut, ShieldAlert, User2 } from 'lucide-react'
+import { Check, ChevronRight, Globe, Loader2, LogOut, ShieldAlert, User2, Sun, Moon } from 'lucide-react'
 import { useAuth } from '../lib/AuthContext'
+import { useTheme } from '../lib/ThemeContext'
 import { openPricingUrl } from '../lib/billing'
 import { supabase, UserProfile } from '../lib/supabase'
 
@@ -77,6 +78,7 @@ const cardStyle: React.CSSProperties = {
 
 export const SettingsPage: React.FC = () => {
   const { profile, refreshProfile, signOut } = useAuth()
+  const { theme, toggleTheme } = useTheme()
   const [name, setName] = useState('')
   const [selectedLanguage, setSelectedLanguage] = useState<UserProfile['language']>('en')
   const [isSavingName, setIsSavingName] = useState(false)
@@ -260,6 +262,26 @@ export const SettingsPage: React.FC = () => {
         <section>
           <SectionLabel>Preferences</SectionLabel>
           <div style={cardStyle}>
+            {/* Theme Toggle */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 24 }}>
+              <div style={{ width: 34, height: 34, borderRadius: '8px', background: C.subtle, display: 'grid', placeItems: 'center' }}>
+                {theme === 'dark' ? <Moon size={16} color={C.text} /> : <Sun size={16} color={C.text} />}
+              </div>
+              <div style={{ flex: 1 }}>
+                <p style={{ fontSize: 16, fontWeight: 600, color: C.text, marginBottom: 2 }}>Appearance</p>
+                <p style={{ fontSize: 14, color: C.muted }}>Choose your preferred theme.</p>
+              </div>
+              <button
+                onClick={toggleTheme}
+                className="btn btn-secondary btn-sm"
+                style={{ minWidth: 100, justifyContent: 'center', gap: 8 }}
+              >
+                {theme === 'dark' ? <Moon size={14} /> : <Sun size={14} />}
+                {theme === 'dark' ? 'Dark' : 'Light'}
+              </button>
+            </div>
+
+            {/* Language */}
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 18 }}>
               <div style={{ width: 34, height: 34, borderRadius: '8px', background: C.subtle, display: 'grid', placeItems: 'center' }}>
                 <Globe size={16} color={C.text} />
