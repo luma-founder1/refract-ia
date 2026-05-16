@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { GitBranch, Save, Loader } from 'lucide-react';
 import { Project } from '../shared/types';
+import { useAuth } from '../lib/AuthContext';
 import { getAllProjects, getSetting, setSetting } from '../lib/db';
 
 interface ProjectGuideline {
@@ -11,6 +12,7 @@ interface ProjectGuideline {
 }
 
 export const GuidelinesPage: React.FC = () => {
+  const { profile } = useAuth()
   const [projects, setProjects] = useState<ProjectGuideline[]>([]);
   const [globalText, setGlobalText] = useState('');
   const [isGlobalSaving, setIsGlobalSaving] = useState(false);
@@ -18,12 +20,16 @@ export const GuidelinesPage: React.FC = () => {
 
   useEffect(() => {
     async function loadData() {
+      if (!profile?.id) {
+        setIsLoading(false)
+        return
+      }
       setIsLoading(true);
       try {
         const gText = await getSetting('global_guidelines', '');
         setGlobalText(gText);
 
-        const allProjects: Project[] = await getAllProjects();
+        const allProjects: Project[] = await getAllProjects(profile.id);
         
         const guidelines: ProjectGuideline[] = [];
         for (const proj of allProjects) {
@@ -44,7 +50,7 @@ export const GuidelinesPage: React.FC = () => {
       setIsLoading(false);
     }
     loadData();
-  }, []);
+  }, [profile?.id]);
 
   const updateText = (id: string, text: string) =>
     setProjects(prev => prev.map(p => (p.project.id === id ? { ...p, text } : p)));

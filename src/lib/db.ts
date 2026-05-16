@@ -3,12 +3,14 @@ import type { Project, Activity } from '../shared/types'
 
 // ─── Guard + Timeout ──────────────────────────────────────────────────────────
 //
-// PROBLEMA ORIGINAL: queries Supabase sem sessão válida ficam pendentes para
-// sempre quando RLS está ativo — o loading nunca termina.
-//
-// SOLUÇÃO:
+// SOLUÇÃO para queries sem rede blocking:
 //  1. withTimeout — envolve qualquer promise e rejeita ao fim de 8s
-//  2. requireUser — lança erro imediato se não há sessão, em vez de pender
+//     evita queries penduradas se há problemas de rede/auth
+//  2. userId passado explicitamente — evita getSession() em cada query
+//     que pode coincdir com token refresh e retornar sessão null
+//     userId vem do AuthContext (sempre válido se user está autenticado)
+//  3. RLS filtering — queries filtram automaticamente por user_id
+//     se RLS policies estão configuradas na DB
 
 const QUERY_TIMEOUT_MS = 8000
 
@@ -21,20 +23,15 @@ function withTimeout<T = any>(promise: any, ms = QUERY_TIMEOUT_MS): Promise<T> {
   ]) as Promise<T>
 }
 
-async function requireUser() {
-  const { data: { session } } = await supabase.auth.getSession()
-  if (!session?.user) throw new Error('Not authenticated')
-  return session.user
-}
+// Pass userId explicitly to queries instead of calling getSession() each time.
+// This avoids race conditions during token refresh and ensures RLS filtering.
 
-// ─── Projects ─────────────────────────────────────────────────────────────────
-
-export async function getRecentProjects(limit = 6): Promise<Project[]> {
-  await requireUser()
+export async function getRecentProjects(userId: string, limit = 6): Promise<Project[]> {
   const { data, error } = await withTimeout(
     supabase
       .from('projects')
       .select('*')
+      .eq('user_id', userId)
       .order('created_at', { ascending: false })
       .limit(limit)
   )
@@ -42,12 +39,12 @@ export async function getRecentProjects(limit = 6): Promise<Project[]> {
   return data || []
 }
 
-export async function getAllProjects(): Promise<Project[]> {
-  await requireUser()
+export async function getAllProjects(userId: string): Promise<Project[]> {
   const { data, error } = await withTimeout(
     supabase
       .from('projects')
       .select('*')
+      .eq('user_id', userId)
       .order('created_at', { ascending: false })
   )
   if (error) throw error
@@ -66,14 +63,13 @@ export async function getProject(id: string): Promise<Project | null> {
   return data
 }
 
-export async function createProject(project: Omit<Project, 'id' | 'created_at'>): Promise<Project> {
-  const user = await requireUser()
+export async function createProject(project: Omit<Project, 'id' | 'created_at'>, userId: string): Promise<Project> {
   const { data, error } = await withTimeout(
     supabase
       .from('projects')
       .insert({
         ...project,
-        user_id: user.id,
+        user_id: userId,
         created_at: new Date().toISOString(),
       })
       .select()
@@ -84,7 +80,6 @@ export async function createProject(project: Omit<Project, 'id' | 'created_at'>)
 }
 
 export async function updateProject(id: string, updates: Partial<Project>): Promise<Project> {
-  await requireUser()
   const { data, error } = await withTimeout(
     supabase
       .from('projects')
@@ -98,7 +93,6 @@ export async function updateProject(id: string, updates: Partial<Project>): Prom
 }
 
 export async function deleteProject(id: string): Promise<void> {
-  await requireUser()
   const { error } = await withTimeout(
     supabase
       .from('projects')
@@ -110,12 +104,12 @@ export async function deleteProject(id: string): Promise<void> {
 
 // ─── Activity ────────────────────────────────────────────────────────────────
 
-export async function getActivity(limit = 8): Promise<Activity[]> {
-  await requireUser()
+export async function getActivity(userId: string, limit = 8): Promise<Activity[]> {
   const { data, error } = await withTimeout(
     supabase
       .from('activity')
       .select('*')
+      .eq('user_id', userId)
       .order('created_at', { ascending: false })
       .limit(limit)
   )
@@ -124,7 +118,6 @@ export async function getActivity(limit = 8): Promise<Activity[]> {
 }
 
 export async function createActivity(activity: Omit<Activity, 'id' | 'created_at'>): Promise<Activity> {
-  const user = await requireUser()
   const { data, error } = await withTimeout(
     supabase
       .from('activity')
@@ -156,7 +149,6 @@ export async function saveHealthSnapshot(
   projectId: string,
   summary: { total: number; high: number; medium: number; low: number }
 ): Promise<void> {
-  await requireUser()
   const score = Math.max(0, Math.min(100,
     100 - (summary.high * 10) - (summary.medium * 4) - (summary.low * 1)
   ))
@@ -176,8 +168,7 @@ export async function saveHealthSnapshot(
   if (error) throw error
 }
 
-export async function getHealthSnapshots(projectId: string, limit = 10): Promise<HealthSnapshot[]> {
-  await requireUser()
+export async function getHealthSnapshots(projectId: string, userId: string, limit = 10): Promise<HealthSnapshot[]> {
   const { data, error } = await withTimeout(
     supabase
       .from('health_snapshots')
@@ -195,7 +186,6 @@ export async function getHealthSnapshots(projectId: string, limit = 10): Promise
 export async function getSetting(key: string, fallback = ''): Promise<string> {
   // Settings não lança — devolve fallback em caso de erro/sem auth
   try {
-    await requireUser()
     const { data, error } = await withTimeout(
       supabase
         .from('settings')
@@ -211,7 +201,6 @@ export async function getSetting(key: string, fallback = ''): Promise<string> {
 }
 
 export async function setSetting(key: string, value: string): Promise<void> {
-  await requireUser()
   const { error } = await withTimeout(
     supabase
       .from('settings')
@@ -243,7 +232,6 @@ export async function saveDecision(
   decision: string,
   applied: number = 0
 ): Promise<void> {
-  await requireUser()
   const { error } = await withTimeout(
     supabase
       .from('project_decisions')
@@ -277,7 +265,6 @@ export async function getDecision(projectId: string, issueSignature: string): Pr
 }
 
 export async function getDecisionHistory(projectId: string): Promise<ProjectDecision[]> {
-  await requireUser()
   const { data, error } = await withTimeout(
     supabase
       .from('project_decisions')

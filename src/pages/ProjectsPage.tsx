@@ -5,6 +5,7 @@ import {
   AlertTriangle, CheckCircle, Clock, ChevronRight, Zap,
 } from 'lucide-react'
 import { Project } from '../shared/types'
+import { useAuth } from '../lib/AuthContext'
 import { NewProjectModal } from '../components/NewProjectModal'
 import { hasPricingUrl, openPricingUrl } from '../lib/billing'
 import { getAllProjects, deleteProject, getHealthSnapshots } from '../lib/db'
@@ -372,6 +373,7 @@ interface ProjectsPageProps {
 }
 
 export const ProjectsPage: React.FC<ProjectsPageProps> = ({ onOpenProject, onNavigate }) => {
+  const { profile } = useAuth()
   const [projects, setProjects] = useState<ProjectWithHealth[]>([])
   const [loading, setLoading] = useState(true)
   const [showModal, setShowModal] = useState(false)
@@ -379,14 +381,18 @@ export const ProjectsPage: React.FC<ProjectsPageProps> = ({ onOpenProject, onNav
   const [error, setError] = useState<string | null>(null)
 
   const loadProjects = async () => {
+    if (!profile?.id) {
+      setLoading(false)
+      return
+    }
     setLoading(true)
     setError(null)
     try {
-      const p: Project[] = await getAllProjects()
+      const p: Project[] = await getAllProjects(profile.id)
 
       const enriched: ProjectWithHealth[] = await Promise.all(
         (p || []).map(async (proj) => {
-          const snapshots: any[] = await getHealthSnapshots(proj.id)
+          const snapshots: any[] = await getHealthSnapshots(proj.id, profile.id)
           const [last, prev] = snapshots // mais recente primeiro
           return {
             ...proj,
@@ -428,7 +434,11 @@ export const ProjectsPage: React.FC<ProjectsPageProps> = ({ onOpenProject, onNav
     }
   }
 
-  useEffect(() => { loadProjects() }, [])
+  useEffect(() => {
+    if (profile?.id) {
+      loadProjects()
+    }
+  }, [profile?.id])
 
   const handleDelete = async (e: React.MouseEvent, id: string) => {
     e.stopPropagation()

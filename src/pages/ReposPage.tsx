@@ -143,7 +143,7 @@ export const ReposPage: React.FC<{ onNavigate: (page: string, params?: any) => v
   }
 
   const handleCloneAndAnalyse = async () => {
-    if (!branchModal) return
+    if (!branchModal || !profile?.id) return
 
     setCloningRepoId(branchModal.repo.id)
     setError(null)
@@ -163,7 +163,7 @@ export const ReposPage: React.FC<{ onNavigate: (page: string, params?: any) => v
           branch: cloneResult.branch,
           status: 'Not analysed',
           last_run: null,
-        })
+        }, profile.id)
       } catch (err) {
         console.warn('Failed to persist cloned project in Supabase, using local fallback', err)
         project = {

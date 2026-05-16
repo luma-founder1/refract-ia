@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { HomePage } from './HomePage';
 import { ProjectsPage } from './ProjectsPage';
 import { ReposPage } from './ReposPage';
@@ -49,12 +49,7 @@ export const AppShell: React.FC = () => {
   const [activePage, setActivePage] = useState<Page>('home');
   const [activeProjectId, setActiveProjectId] = useState<string | null>(null);
 
-  useEffect(() => {
-    if (session && !profile) {
-      // Try to refresh/create profile if it wasn't loaded yet
-      refreshProfile().catch(() => {})
-    }
-  }, [session, profile, refreshProfile])
+
 
 
   // Auth gate: show splash screen while loading auth state

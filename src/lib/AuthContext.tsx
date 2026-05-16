@@ -71,9 +71,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   }, [])
 
+  // Keep a ref to the session so `refreshProfile` doesn't change when `session` object mutates.
+  const sessionRef = useRef<Session | null>(null)
+  sessionRef.current = session
+
   const refreshProfile = useCallback(async () => {
-    if (session?.user?.id) await fetchProfile(session.user.id)
-  }, [session, fetchProfile])
+    if (sessionRef.current?.user?.id) await fetchProfile(sessionRef.current.user.id)
+  }, [fetchProfile]) // `fetchProfile` is stable
 
   const signOut = useCallback(async () => {
     await supabase.auth.signOut()
@@ -138,11 +142,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   // ── Bootstrap ─────────────────────────────────────────────────────────────
   useEffect(() => {
     // 1. Ler sessão do localStorage (síncrono na prática — sem rede)
-    supabase.auth.getSession().then(async ({ data }) => {
+    // NOTE: don't call `fetchProfile` here — `onAuthStateChange` will emit the
+    // INITIAL_SESSION event and handle the profile fetch. This avoids double-fetches.
+    supabase.auth.getSession().then(({ data }) => {
       const s = data.session
       setSession(s)
-      if (s?.user?.id) await fetchProfile(s.user.id)
-      doneLoading() // ← garante que o loading termina mesmo se onAuthStateChange não disparar
+      doneLoading()
     }).catch(e => {
       console.error('[auth] getSession failed:', e)
       doneLoading()

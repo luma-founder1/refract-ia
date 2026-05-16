@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react'
 import { Plus, GitBranch, ArrowRight, Zap, Activity, Wrench } from 'lucide-react'
 import { Page } from '../components/Sidebar'
 import { Project } from '../shared/types'
+import { useAuth } from '../lib/AuthContext'
 import { NewProjectModal } from '../components/NewProjectModal'
 import { getRecentProjects } from '../lib/db'
 
@@ -37,6 +38,7 @@ const StatusBadge: React.FC<{ status: string }> = ({ status }) => {
 }
 
 export const HomePage: React.FC<HomePageProps> = ({ onNavigate }) => {
+  const { profile } = useAuth()
   const [projects, setProjects] = useState<Project[]>([])
   const [loading, setLoading] = useState(true)
   const [showModal, setShowModal] = useState(false)
@@ -44,9 +46,13 @@ export const HomePage: React.FC<HomePageProps> = ({ onNavigate }) => {
 
   useEffect(() => {
     const load = async () => {
+      if (!profile?.id) {
+        setLoading(false)
+        return
+      }
       try {
         setError(null);
-        const p = await getRecentProjects()
+        const p = await getRecentProjects(profile.id)
         setProjects(p ?? [])
       } catch (err) {
         console.error('Failed to load home data:', err)
@@ -56,7 +62,7 @@ export const HomePage: React.FC<HomePageProps> = ({ onNavigate }) => {
       }
     }
     load()
-  }, [])
+  }, [profile?.id])
 
   const hasProjects = projects.length > 0
   const analysedCount = projects.filter((p: Project) => normalizeStatus(p.status) === 'Refracted').length
