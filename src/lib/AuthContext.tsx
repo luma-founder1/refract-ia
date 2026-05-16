@@ -141,43 +141,51 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   // ── Bootstrap ─────────────────────────────────────────────────────────────
   useEffect(() => {
-    // 1. Ler sessão do localStorage (síncrono na prática — sem rede)
-    // NOTE: don't call `fetchProfile` here — `onAuthStateChange` will emit the
-    // INITIAL_SESSION event and handle the profile fetch. This avoids double-fetches.
-    supabase.auth.getSession().then(({ data }) => {
-      const s = data.session
-      setSession(s)
-      doneLoading()
-    }).catch(e => {
-      console.error('[auth] getSession failed:', e)
-      doneLoading()
-    })
+    let initialSessionHandled = false
 
-    // 2. Ouvir mudanças futuras (login, logout, token refresh, OAuth redirect)
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, s) => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, s) => {
       setSession(s)
+
+      // TOKEN_REFRESHED não precisa de re-fetch do profile
+      if (event === 'TOKEN_REFRESHED') {
+        if (!initialSessionHandled) {
+          initialSessionHandled = true
+          doneLoading()
+        }
+        return
+      }
 
       if (s?.user?.id) {
-        // Guardar github token se presente (OAuth)
-        const providerToken = (s as Session & { provider_token?: string | null }).provider_token
+        const providerToken = (s as any).provider_token
         if (providerToken) {
-          const { error } = await supabase
+          await supabase
             .from('users')
             .update({ github_token: providerToken })
             .eq('id', s.user.id)
-          if (error) console.warn('[auth] failed to store github token:', error.message)
         }
-
         await fetchProfile(s.user.id)
       } else {
         setProfile(null)
       }
 
-      // Se o getSession ainda não terminou (ex: OAuth redirect), termina aqui
-      doneLoading()
+      if (!initialSessionHandled) {
+        initialSessionHandled = true
+        doneLoading()
+      }
     })
 
-    return () => subscription.unsubscribe()
+    // Fallback: se onAuthStateChange não disparar em 5s, desbloquear
+    const fallback = setTimeout(() => {
+      if (!initialSessionHandled) {
+        initialSessionHandled = true
+        doneLoading()
+      }
+    }, 5000)
+
+    return () => {
+      subscription.unsubscribe()
+      clearTimeout(fallback)
+    }
   }, [fetchProfile])
 
   return (
