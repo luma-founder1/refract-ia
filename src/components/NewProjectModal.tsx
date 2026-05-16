@@ -238,7 +238,7 @@ export const NewProjectModal: React.FC<Props> = ({ onClose, onProjectCreated, on
         @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
         .spin { animation: spin 1.5s cubic-bezier(0.4, 0, 0.2, 1) infinite; }
         @keyframes pulse { 0% { opacity: 0.3 } 50% { opacity: 0.6 } 100% { opacity: 0.3 } }
-        .skeleton { background: var(--muted); border-radius: var(--radius); animation: pulse 1.5s infinite ease-in-out; }
+        .skeleton { background: var(--surface-strong); border-radius: 8px; animation: pulse 1.5s infinite ease-in-out; }
       `}</style>
 
       <div
@@ -261,12 +261,11 @@ export const NewProjectModal: React.FC<Props> = ({ onClose, onProjectCreated, on
           onClick={(event) => event.stopPropagation()}
           className="card"
           style={{
-            background: 'var(--background)',
+            background: 'var(--canvas)',
             width: '100%',
             maxWidth: 560,
             padding: 32,
             position: 'relative',
-            boxShadow: 'var(--shadow-border), 0 30px 60px rgba(0,0,0,0.5)',
           }}
         >
           <button
@@ -286,10 +285,10 @@ export const NewProjectModal: React.FC<Props> = ({ onClose, onProjectCreated, on
           </button>
 
           <div style={{ marginBottom: 24, paddingRight: 36 }}>
-            <h2 className="page-title" style={{ fontSize: 24, marginBottom: 8 }}>
+            <h2 className="page-title" style={{ fontSize: '22px', fontWeight: 400, letterSpacing: '-0.11px', marginBottom: 8 }}>
               Import Repository
             </h2>
-            <p style={{ fontSize: 14, color: 'var(--muted-foreground)', lineHeight: 1.6 }}>
+            <p style={{ fontSize: 14, color: 'var(--ink-muted)', lineHeight: 1.5 }}>
               Connect GitHub, pick a repository, and import a branch directly into Refract for analysis.
             </p>
           </div>
@@ -300,16 +299,16 @@ export const NewProjectModal: React.FC<Props> = ({ onClose, onProjectCreated, on
                 display: 'flex',
                 alignItems: 'flex-start',
                 gap: 10,
-                padding: '12px 14px',
-                borderRadius: 12,
+                padding: '12px 16px',
+                borderRadius: '8px',
                 marginBottom: 20,
-                background: 'rgba(255, 91, 79, 0.08)',
-                border: '1px solid rgba(255, 91, 79, 0.18)',
-                color: '#ff7f76',
+                background: 'rgba(207, 45, 86, 0.08)',
+                border: '1px solid rgba(207, 45, 86, 0.18)',
+                color: 'var(--semantic-error)',
               }}
             >
               <AlertCircle size={16} style={{ flexShrink: 0, marginTop: 1 }} />
-              <span style={{ fontSize: 12, lineHeight: 1.6 }}>{error}</span>
+              <span style={{ fontSize: 14, lineHeight: 1.5 }}>{error}</span>
             </div>
           )}
 
@@ -317,9 +316,9 @@ export const NewProjectModal: React.FC<Props> = ({ onClose, onProjectCreated, on
             <div
               style={{
                 padding: 28,
-                borderRadius: 16,
-                background: 'var(--card)',
-                boxShadow: 'var(--shadow-border)',
+                borderRadius: '12px',
+                background: 'var(--surface-card)',
+                border: '1px solid var(--hairline)',
                 display: 'flex',
                 flexDirection: 'column',
                 gap: 18,
@@ -330,20 +329,20 @@ export const NewProjectModal: React.FC<Props> = ({ onClose, onProjectCreated, on
                   style={{
                     width: 48,
                     height: 48,
-                    borderRadius: 14,
-                    background: 'var(--accent)',
+                    borderRadius: '8px',
+                    background: 'var(--canvas-soft)',
                     display: 'grid',
                     placeItems: 'center',
-                    color: 'var(--foreground)',
+                    color: 'var(--ink)',
                   }}
                 >
                   <Github size={22} />
                 </div>
                 <div>
-                  <p style={{ fontSize: 16, fontWeight: 600, color: 'var(--foreground)', marginBottom: 4 }}>
+                  <p style={{ fontSize: 18, fontWeight: 600, color: 'var(--ink)', marginBottom: 4 }}>
                     Connect GitHub
                   </p>
-                  <p style={{ fontSize: 13, color: 'var(--muted-foreground)', lineHeight: 1.6 }}>
+                  <p style={{ fontSize: 14, color: 'var(--ink-muted)', lineHeight: 1.5 }}>
                     Connect your GitHub account to import repositories.
                   </p>
                 </div>
@@ -355,7 +354,7 @@ export const NewProjectModal: React.FC<Props> = ({ onClose, onProjectCreated, on
                 className="btn btn-primary"
                 style={{ alignSelf: 'flex-start', gap: 8 }}
               >
-                {connectingGitHub ? <Loader2 size={15} className="spin" /> : <Github size={15} />}
+                {connectingGitHub ? <Loader2 size={16} className="spin" /> : <Github size={16} />}
                 {connectingGitHub ? 'Connecting...' : 'Connect GitHub'}
               </button>
             </div>
@@ -364,17 +363,17 @@ export const NewProjectModal: React.FC<Props> = ({ onClose, onProjectCreated, on
           {step === 'repos' && (
             <div>
               <div style={{ position: 'relative', marginBottom: 18 }}>
-                <Search size={16} style={{ position: 'absolute', left: 14, top: '50%', transform: 'translateY(-50%)', color: 'var(--muted-foreground)' }} />
+                <Search size={16} style={{ position: 'absolute', left: 14, top: '50%', transform: 'translateY(-50%)', color: 'var(--ink-muted)' }} />
                 <input
                   className="input"
-                  style={{ width: '100%', height: 40, paddingLeft: 40 }}
+                  style={{ width: '100%', height: 44, paddingLeft: 40 }}
                   placeholder="Search repositories, descriptions, or languages..."
                   value={search}
                   onChange={(event) => setSearch(event.target.value)}
                 />
               </div>
 
-              <div className="card" style={{ padding: 0, overflow: 'hidden', boxShadow: 'var(--shadow-border)' }}>
+              <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
                 <div style={{ maxHeight: 400, overflowY: 'auto' }}>
                   {loadingRepos ? (
                     Array.from({ length: 5 }).map((_, index) => (
@@ -382,7 +381,7 @@ export const NewProjectModal: React.FC<Props> = ({ onClose, onProjectCreated, on
                         key={index}
                         style={{
                           padding: '16px 18px',
-                          borderBottom: index === 4 ? 'none' : '1px solid var(--border)',
+                          borderBottom: index === 4 ? 'none' : '1px solid var(--hairline)',
                           display: 'flex',
                           alignItems: 'center',
                           justifyContent: 'space-between',
@@ -403,8 +402,8 @@ export const NewProjectModal: React.FC<Props> = ({ onClose, onProjectCreated, on
                     ))
                   ) : filteredRepos.length === 0 ? (
                     <div style={{ padding: '48px 24px', textAlign: 'center' }}>
-                      <p style={{ fontSize: 14, color: 'var(--foreground)', marginBottom: 6 }}>No repositories found.</p>
-                      <p style={{ fontSize: 12, color: 'var(--muted-foreground)', lineHeight: 1.6 }}>
+                      <p style={{ fontSize: 16, color: 'var(--ink)', marginBottom: 6 }}>No repositories found.</p>
+                      <p style={{ fontSize: 14, color: 'var(--ink-muted)', lineHeight: 1.5 }}>
                         Try another search term or reconnect GitHub if the list looks incomplete.
                       </p>
                     </div>
@@ -414,7 +413,7 @@ export const NewProjectModal: React.FC<Props> = ({ onClose, onProjectCreated, on
                         key={repo.id}
                         style={{
                           padding: '16px 18px',
-                          borderBottom: index === filteredRepos.length - 1 ? 'none' : '1px solid var(--border)',
+                          borderBottom: index === filteredRepos.length - 1 ? 'none' : '1px solid var(--hairline)',
                           display: 'flex',
                           alignItems: 'flex-start',
                           justifyContent: 'space-between',
@@ -423,12 +422,12 @@ export const NewProjectModal: React.FC<Props> = ({ onClose, onProjectCreated, on
                       >
                         <div style={{ minWidth: 0, flex: 1 }}>
                           <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6, minWidth: 0 }}>
-                            <Github size={15} style={{ flexShrink: 0, color: 'var(--foreground)' }} />
+                            <Github size={15} style={{ flexShrink: 0, color: 'var(--ink)' }} />
                             <span
                               style={{
-                                fontSize: 14,
+                                fontSize: 16,
                                 fontWeight: 600,
-                                color: 'var(--foreground)',
+                                color: 'var(--ink)',
                                 overflow: 'hidden',
                                 whiteSpace: 'nowrap',
                                 textOverflow: 'ellipsis',
@@ -438,21 +437,21 @@ export const NewProjectModal: React.FC<Props> = ({ onClose, onProjectCreated, on
                             </span>
                           </div>
 
-                          <p style={{ fontSize: 12, color: 'var(--muted-foreground)', lineHeight: 1.6, marginBottom: 10 }}>
+                          <p style={{ fontSize: 14, color: 'var(--ink-muted)', lineHeight: 1.5, marginBottom: 10 }}>
                             {repo.description || 'No description provided.'}
                           </p>
 
                           <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 8 }}>
                             {repo.language && (
-                              <span className="badge badge-muted" style={{ padding: '2px 8px', fontSize: 10 }}>
+                              <span className="badge badge-muted" style={{ padding: '2px 8px', fontSize: 11 }}>
                                 {repo.language}
                               </span>
                             )}
-                            <span className={repo.private ? 'badge badge-error' : 'badge badge-success'} style={{ padding: '2px 8px', fontSize: 10, textTransform: 'uppercase' }}>
+                            <span className="badge badge-muted" style={{ padding: '2px 8px', fontSize: 11, textTransform: 'uppercase' }}>
                               {repo.private ? <Lock size={10} style={{ marginRight: 4 }} /> : <Globe size={10} style={{ marginRight: 4 }} />}
                               {repo.private ? 'Private' : 'Public'}
                             </span>
-                            <span style={{ fontSize: 11, color: 'var(--muted-foreground)' }}>
+                            <span style={{ fontSize: 13, color: 'var(--ink-muted)' }}>
                               Updated {new Date(repo.updated_at).toLocaleDateString('en-US')}
                             </span>
                           </div>
@@ -486,32 +485,32 @@ export const NewProjectModal: React.FC<Props> = ({ onClose, onProjectCreated, on
                 Back
               </button>
 
-              <div className="card" style={{ padding: 20, boxShadow: 'var(--shadow-border)', marginBottom: 18 }}>
-                <p style={{ fontSize: 12, color: 'var(--muted-foreground)', marginBottom: 6 }}>
+              <div className="card" style={{ padding: 20, marginBottom: 18 }}>
+                <p style={{ fontSize: 13, color: 'var(--ink-muted)', marginBottom: 6 }}>
                   Selected repository
                 </p>
-                <p style={{ fontSize: 16, fontWeight: 600, color: 'var(--foreground)', marginBottom: 6 }}>
+                <p style={{ fontSize: 18, fontWeight: 600, color: 'var(--ink)', marginBottom: 6 }}>
                   {selectedRepo.full_name}
                 </p>
-                <p style={{ fontSize: 12, color: 'var(--muted-foreground)', lineHeight: 1.6 }}>
+                <p style={{ fontSize: 14, color: 'var(--ink-muted)', lineHeight: 1.5 }}>
                   Choose the branch you want to import and analyse.
                 </p>
               </div>
 
-              <label style={{ display: 'block', fontSize: 12, color: 'var(--foreground)', marginBottom: 8 }}>
+              <label style={{ display: 'block', fontSize: 14, color: 'var(--ink)', marginBottom: 8 }}>
                 Branch
               </label>
 
               {loadingBranches ? (
-                <div className="card" style={{ padding: 18, boxShadow: 'var(--shadow-border)', marginBottom: 20 }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 10, color: 'var(--muted-foreground)' }}>
-                    <Loader2 size={15} className="spin" />
-                    <span style={{ fontSize: 13 }}>Loading branches...</span>
+                <div className="card" style={{ padding: 18, marginBottom: 20 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 10, color: 'var(--ink-muted)' }}>
+                    <Loader2 size={16} className="spin" />
+                    <span style={{ fontSize: 14 }}>Loading branches...</span>
                   </div>
                 </div>
               ) : (
                 <div style={{ position: 'relative', marginBottom: 20 }}>
-                  <GitBranch size={15} style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', color: 'var(--muted-foreground)' }} />
+                  <GitBranch size={15} style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', color: 'var(--ink-muted)' }} />
                   <select
                     className="input"
                     value={selectedBranch}
@@ -529,7 +528,7 @@ export const NewProjectModal: React.FC<Props> = ({ onClose, onProjectCreated, on
               )}
 
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
-                <p style={{ fontSize: 12, color: 'var(--muted-foreground)', lineHeight: 1.6 }}>
+                <p style={{ fontSize: 14, color: 'var(--ink-muted)', lineHeight: 1.5 }}>
                   {importing ? 'Importing repository into the analysis flow...' : 'The selected branch will be loaded into memory and saved as a project.'}
                 </p>
                 <button
@@ -539,7 +538,7 @@ export const NewProjectModal: React.FC<Props> = ({ onClose, onProjectCreated, on
                   disabled={loadingBranches || importing || !selectedBranch}
                   style={{ gap: 8, minWidth: 148, justifyContent: 'center' }}
                 >
-                  {importing ? <Loader2 size={14} className="spin" /> : <GitBranch size={14} />}
+                  {importing ? <Loader2 size={16} className="spin" /> : <GitBranch size={16} />}
                   {importing ? 'Importing...' : 'Import & Analyse'}
                 </button>
               </div>

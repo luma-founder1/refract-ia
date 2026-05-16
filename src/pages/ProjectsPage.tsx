@@ -13,10 +13,10 @@ import { getAllProjects, deleteProject, getHealthSnapshots } from '../lib/db'
 // ─── Constants ────────────────────────────────────────────────────────────────
 
 const C = {
-  bg: 'var(--canvas)', surface: 'var(--surface-1)', border: 'var(--hairline)',
-  text: 'var(--ink)', muted: 'var(--ink-muted)', subtle: 'var(--surface-2)',
-  blue: 'var(--accent-blue)', green: 'var(--semantic-success)', red: 'var(--gradient-coral)',
-  yellow: 'var(--gradient-orange)', blueHover: 'var(--accent-blue)',
+  bg: 'var(--canvas)', surface: 'var(--surface-card)', border: 'var(--hairline)',
+  text: 'var(--ink)', muted: 'var(--ink-muted)', subtle: 'var(--surface-strong)',
+  green: 'var(--semantic-success)', red: 'var(--semantic-error)',
+  yellow: 'var(--timeline-done)',
 }
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -46,9 +46,9 @@ function getScoreColor(score: number): string {
 }
 
 function getScoreBg(score: number): string {
-  if (score >= 80) return 'rgba(0, 112, 243, 0.1)'
-  if (score >= 55) return 'rgba(10, 114, 239, 0.1)'
-  return 'rgba(255, 91, 79, 0.1)'
+  if (score >= 80) return 'rgba(31, 138, 101, 0.1)'
+  if (score >= 55) return 'rgba(192, 133, 50, 0.1)'
+  return 'rgba(207, 45, 86, 0.1)'
 }
 
 function getDelta(current?: HealthSnapshot, prev?: HealthSnapshot): number | null {
@@ -88,7 +88,7 @@ const ScoreRing: React.FC<{ score: number; size?: number }> = ({ score, size = 4
 
   return (
     <svg width={size} height={size} style={{ transform: 'rotate(-90deg)' }}>
-      <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke="var(--border)" strokeWidth={2} />
+      <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke="var(--hairline)" strokeWidth={2} />
       <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke={color} strokeWidth={2}
         strokeDasharray={`${filled} ${circ}`} strokeLinecap="round" style={{ transition: 'stroke-dasharray 0.6s ease' }} />
       <text x="50%" y="50%" textAnchor="middle" dominantBaseline="middle"
@@ -126,17 +126,17 @@ const MonitorPanel: React.FC<{
   return (
     <div style={{
       position: 'fixed', top: 0, right: 0, bottom: 0, width: 380,
-      background: 'var(--background)', boxShadow: 'var(--shadow-border)',
+      background: 'var(--canvas)', borderLeft: '1px solid var(--hairline)',
       display: 'flex', flexDirection: 'column', zIndex: 100,
       animation: 'slideIn 0.3s cubic-bezier(0.16, 1, 0.3, 1)',
     }}>
       <style>{`@keyframes slideIn { from { transform: translateX(20px); opacity: 0 } to { transform: translateX(0); opacity: 1 } }`}</style>
 
       {/* Header */}
-      <div style={{ padding: '20px 24px', borderBottom: `1px solid var(--border)`, display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexShrink: 0 }}>
+      <div style={{ padding: '20px 24px', borderBottom: `1px solid var(--hairline)`, display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexShrink: 0 }}>
         <div>
-          <p style={{ fontSize: 14, fontWeight: 600, color: 'var(--foreground)', letterSpacing: '-0.02em' }}>{project.name}</p>
-          <p style={{ fontSize: 11, color: 'var(--muted-foreground)', fontFamily: 'var(--font-mono)', marginTop: 2 }}>
+          <p style={{ fontSize: 14, fontWeight: 600, color: 'var(--ink)', letterSpacing: 0 }}>{project.name}</p>
+          <p style={{ fontSize: 11, color: 'var(--ink-muted)', fontFamily: 'var(--font-mono)', marginTop: 2 }}>
             {project.repo || project.path}
           </p>
         </div>
@@ -150,20 +150,20 @@ const MonitorPanel: React.FC<{
       <div style={{ flex: 1, overflowY: 'auto', padding: '20px' }}>
 
         {/* Health Score */}
-        <div style={{ background: bg, border: `1px solid ${color}22`, borderRadius: 'var(--radius)', padding: '24px', marginBottom: 20, display: 'flex', alignItems: 'center', gap: 24, boxShadow: 'var(--shadow-border)' }}>
+        <div style={{ background: bg, border: `1px solid ${color}22`, borderRadius: '12px', padding: '24px', marginBottom: 20, display: 'flex', alignItems: 'center', gap: 24 }}>
           <ScoreRing score={score} size={64} />
           <div style={{ flex: 1 }}>
             <p className="section-label" style={{ marginBottom: 4 }}>Health Score</p>
-            <p style={{ fontSize: 28, fontWeight: 700, color, fontFamily: 'var(--font-mono)', letterSpacing: '-0.05em' }}>{score}<span style={{ fontSize: 14, color: 'var(--muted-foreground)' }}>/100</span></p>
+            <p style={{ fontSize: 28, fontWeight: 600, color, fontFamily: 'var(--font-mono)', letterSpacing: '-0.05em' }}>{score}<span style={{ fontSize: 14, color: 'var(--ink-muted)' }}>/100</span></p>
             {delta !== null && (
               <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginTop: 4 }}>
                 {delta > 0
                   ? <TrendingUp size={12} color={C.green} />
                   : delta < 0
                   ? <TrendingDown size={12} color={C.red} />
-                  : <Minus size={12} color="var(--muted-foreground)" />
+                  : <Minus size={12} color="var(--ink-muted)" />
                 }
-                <span style={{ fontSize: 12, color: delta > 0 ? C.green : delta < 0 ? C.red : 'var(--muted-foreground)' }}>
+                <span style={{ fontSize: 12, color: delta > 0 ? C.green : delta < 0 ? C.red : 'var(--ink-muted)' }}>
                   {delta > 0 ? '+' : ''}{delta} since last analysis
                 </span>
               </div>
@@ -178,20 +178,20 @@ const MonitorPanel: React.FC<{
           {project.lastSnapshot ? (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
               {delta !== null && delta < -5 && (
-                <div style={{ background: '#1f0d0d', border: '1px solid #3a1a1a', borderRadius: 6, padding: '10px 12px', display: 'flex', gap: 10, alignItems: 'flex-start' }}>
+                <div style={{ background: 'rgba(207, 45, 86, 0.08)', border: '1px solid rgba(207, 45, 86, 0.18)', borderRadius: '8px', padding: '10px 12px', display: 'flex', gap: 10, alignItems: 'flex-start' }}>
                   <AlertTriangle size={13} color={C.red} style={{ flexShrink: 0, marginTop: 1 }} />
                   <div>
                     <p style={{ fontSize: 12, color: C.red, fontWeight: 500, marginBottom: 2 }}>Degradation detected</p>
-                    <p style={{ fontSize: 11, color: '#888' }}>Score dropped {Math.abs(delta)} points since last analysis.</p>
+                    <p style={{ fontSize: 11, color: 'var(--ink-muted)' }}>Score dropped {Math.abs(delta)} points since last analysis.</p>
                   </div>
                 </div>
               )}
               {delta !== null && delta >= 0 && (
-                <div style={{ background: '#0d1f0d', border: '1px solid #1a3a1a', borderRadius: 6, padding: '10px 12px', display: 'flex', gap: 10, alignItems: 'flex-start' }}>
+                <div style={{ background: 'rgba(31, 138, 101, 0.08)', border: '1px solid rgba(31, 138, 101, 0.18)', borderRadius: '8px', padding: '10px 12px', display: 'flex', gap: 10, alignItems: 'flex-start' }}>
                   <CheckCircle size={13} color={C.green} style={{ flexShrink: 0, marginTop: 1 }} />
                   <div>
                     <p style={{ fontSize: 12, color: C.green, fontWeight: 500, marginBottom: 2 }}>No degradation</p>
-                    <p style={{ fontSize: 11, color: '#888' }}>Stable or improving quality.</p>
+                    <p style={{ fontSize: 11, color: 'var(--ink-muted)' }}>Stable or improving quality.</p>
                   </div>
                 </div>
               )}
@@ -199,8 +199,8 @@ const MonitorPanel: React.FC<{
               {/* Last snapshot info */}
               <div className="card" style={{ padding: '12px 16px' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
-                  <span className="section-label" style={{ fontSize: 9 }}>Last analysis</span>
-                  <span style={{ fontSize: 10, color: 'var(--muted-foreground)', fontFamily: 'var(--font-mono)' }}>
+                  <span className="section-label" style={{ fontSize: 11 }}>Last analysis</span>
+                  <span style={{ fontSize: 11, color: 'var(--ink-muted)', fontFamily: 'var(--font-mono)' }}>
                     {project.lastSnapshot.timestamp ? new Date(project.lastSnapshot.timestamp).toLocaleDateString('en-US') : '—'}
                   </span>
                 </div>
@@ -208,19 +208,19 @@ const MonitorPanel: React.FC<{
                   { label: 'Total issues', value: project.lastSnapshot.issueCount },
                   { label: 'High impact', value: project.lastSnapshot.high, color: C.red },
                   { label: 'Medium', value: project.lastSnapshot.medium, color: C.yellow },
-                  { label: 'Low', value: project.lastSnapshot.low, color: 'var(--muted-foreground)' },
+                  { label: 'Low', value: project.lastSnapshot.low, color: 'var(--ink-muted)' },
                 ].map(({ label, value, color: vc }) => (
                   <div key={label} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
-                    <span style={{ fontSize: 12, color: 'var(--muted-foreground)' }}>{label}</span>
-                    <span style={{ fontSize: 12, color: vc ?? 'var(--foreground)', fontWeight: 600 }}>{value}</span>
+                    <span style={{ fontSize: 14, color: 'var(--ink-muted)' }}>{label}</span>
+                    <span style={{ fontSize: 14, color: vc ?? 'var(--ink)', fontWeight: 600 }}>{value}</span>
                   </div>
                 ))}
               </div>
             </div>
           ) : (
-            <div style={{ background: C.bg, border: `1px solid ${C.border}`, borderRadius: 6, padding: '14px', display: 'flex', alignItems: 'center', gap: 10 }}>
+            <div style={{ background: 'var(--canvas-soft)', border: `1px solid var(--hairline)`, borderRadius: '8px', padding: '14px', display: 'flex', alignItems: 'center', gap: 10 }}>
               <Clock size={13} color={C.muted} />
-              <p style={{ fontSize: 12, color: C.muted }}>No analyses yet. Run the first one to start monitoring.</p>
+              <p style={{ fontSize: 14, color: C.muted }}>No analyses yet. Run the first one to start monitoring.</p>
             </div>
           )}
         </div>
@@ -228,18 +228,18 @@ const MonitorPanel: React.FC<{
         {/* Pro features — locked */}
         <div style={{ marginBottom: 20 }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
-            <p style={{ fontSize: 10, color: C.muted, textTransform: 'uppercase', letterSpacing: '1.2px' }}>Pro Features</p>
-            <span style={{ fontSize: 9, color: C.blue, background: '#0d0d1f', border: `1px solid ${C.blue}33`, borderRadius: 4, padding: '2px 6px', fontWeight: 600 }}>PRO</span>
+            <p className="section-label">Pro Features</p>
+            <span style={{ fontSize: 11, color: 'var(--primary)', background: 'rgba(245, 78, 0, 0.08)', border: '1px solid rgba(245, 78, 0, 0.2)', borderRadius: '4px', padding: '2px 6px', fontWeight: 600 }}>PRO</span>
           </div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
             {proFeatures.map(({ icon, label, desc }) => (
-              <div key={label} style={{ background: C.bg, border: `1px solid ${C.border}`, borderRadius: 6, padding: '10px 12px', opacity: 0.5, position: 'relative', overflow: 'hidden' }}>
+              <div key={label} style={{ background: 'var(--surface-card)', border: `1px solid var(--hairline)`, borderRadius: '8px', padding: '10px 12px', opacity: 0.5, position: 'relative', overflow: 'hidden' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 3 }}>
                   <span style={{ color: C.muted }}>{icon}</span>
-                  <span style={{ fontSize: 12, color: C.text, fontWeight: 500 }}>{label}</span>
+                  <span style={{ fontSize: 14, color: C.text, fontWeight: 500 }}>{label}</span>
                   <Lock size={10} color={C.muted} style={{ marginLeft: 'auto' }} />
                 </div>
-                <p style={{ fontSize: 11, color: C.muted, paddingLeft: 21 }}>{desc}</p>
+                <p style={{ fontSize: 13, color: C.muted, paddingLeft: 21 }}>{desc}</p>
               </div>
             ))}
           </div>
@@ -247,7 +247,7 @@ const MonitorPanel: React.FC<{
             Upgrade to Pro
           </button>
           {!hasPricingUrl && (
-            <p style={{ marginTop: 8, fontSize: 11, color: C.muted }}>
+            <p style={{ marginTop: 8, fontSize: 13, color: C.muted }}>
               Set `VITE_PRICING_URL` to enable this CTA.
             </p>
           )}
@@ -255,7 +255,7 @@ const MonitorPanel: React.FC<{
       </div>
 
       {/* Footer */}
-      <div style={{ padding: '16px 24px', borderTop: `1px solid var(--border)`, flexShrink: 0 }}>
+      <div style={{ padding: '16px 24px', borderTop: `1px solid var(--hairline)`, flexShrink: 0 }}>
         <button onClick={onOpenAnalysis} className="btn btn-secondary" style={{ width: '100%', justifyContent: 'space-between' }}>
           <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}><Play size={14} /> Open Analysis</span>
           <ChevronRight size={14} />
@@ -286,17 +286,17 @@ const ProjectCard: React.FC<{
       onMouseLeave={() => setHovered(false)}
       className="card"
       style={{
-        background: selected ? 'var(--accent)' : 'var(--card)',
+        background: selected ? 'var(--canvas-soft)' : 'var(--surface-card)',
         padding: '20px', cursor: 'pointer',
-        boxShadow: selected ? '0 0 0 1px var(--ring)' : 'var(--shadow-border)',
+        border: selected ? '1px solid var(--primary)' : '1px solid var(--hairline)',
         position: 'relative',
       }}
     >
       {/* Top row */}
       <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 12 }}>
         <div style={{ flex: 1, minWidth: 0 }}>
-          <p style={{ fontSize: 14, fontWeight: 600, color: 'var(--foreground)', marginBottom: 4, letterSpacing: '-0.02em' }}>{project.name}</p>
-          <p style={{ fontSize: 11, color: 'var(--muted-foreground)', fontFamily: 'var(--font-mono)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+          <p style={{ fontSize: 16, fontWeight: 600, color: 'var(--ink)', marginBottom: 4, letterSpacing: 0 }}>{project.name}</p>
+          <p style={{ fontSize: 13, color: 'var(--ink-muted)', fontFamily: 'var(--font-mono)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', lineHeight: 1.5 }}>
             {project.repo || project.path}
           </p>
         </div>
@@ -306,7 +306,7 @@ const ProjectCard: React.FC<{
           </div>
         )}
         {score === undefined && (
-          <span style={{ fontSize: 10, color: C.muted, background: C.subtle, borderRadius: 4, padding: '3px 7px', flexShrink: 0 }}>
+          <span style={{ fontSize: 11, color: C.muted, background: 'var(--surface-strong)', borderRadius: '4px', padding: '3px 7px', flexShrink: 0 }}>
             Not analysed
           </span>
         )}
@@ -314,17 +314,17 @@ const ProjectCard: React.FC<{
 
       {/* Middle row — métricas */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 16 }}>
-        <span className="badge badge-muted" style={{ fontSize: 10, padding: '1px 6px' }}>
+        <span className="badge badge-muted" style={{ fontSize: 11, padding: '2px 6px' }}>
           <GitBranch size={9} /> {project.branch || 'main'}
         </span>
         {delta !== null && (
-          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 3, fontSize: 10, color: delta >= 0 ? C.green : C.red, fontWeight: 600 }}>
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 3, fontSize: 11, color: delta >= 0 ? C.green : C.red, fontWeight: 600 }}>
             {delta > 0 ? <TrendingUp size={10} /> : delta < 0 ? <TrendingDown size={10} /> : <Minus size={10} />}
             {delta > 0 ? '+' : ''}{delta}
           </span>
         )}
         {project.lastSnapshot && (
-          <span className="section-label" style={{ fontSize: 9, marginLeft: 'auto', letterSpacing: '0.05em' }}>
+          <span className="section-label" style={{ fontSize: 11, marginLeft: 'auto' }}>
             {project.lastSnapshot.issueCount} issues
           </span>
         )}
@@ -338,8 +338,8 @@ const ProjectCard: React.FC<{
       )}
 
       {/* Bottom row — actions */}
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', paddingTop: 12, borderTop: `1px solid var(--border)` }}>
-        <span style={{ fontSize: 10, color: 'var(--muted-foreground)' }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', paddingTop: 12, borderTop: `1px solid var(--hairline)` }}>
+        <span style={{ fontSize: 13, color: 'var(--ink-muted)' }}>
           {project.last_run ? `Last analysis ${new Date(project.last_run).toLocaleDateString('en-US')}` : 'Never analysed'}
         </span>
         <div style={{ display: 'flex', gap: 6, opacity: hovered ? 1 : 0, transition: 'opacity 0.12s ease' }}>
@@ -347,17 +347,17 @@ const ProjectCard: React.FC<{
             onClick={onAnalyse}
             title="Run Analysis"
             className="btn btn-secondary btn-sm"
-            style={{ height: 26, padding: '0 8px', fontSize: 10 }}
+            style={{ height: 28, padding: '0 10px', fontSize: 12 }}
           >
-            <Play size={10} /> Analyse
+            <Play size={12} /> Analyse
           </button>
           <button
             onClick={onDelete}
             title="Delete"
             className="btn btn-ghost btn-sm"
-            style={{ height: 26, width: 26, padding: 0 }}
+            style={{ height: 28, width: 28, padding: 0 }}
           >
-            <Trash2 size={12} className="text-destructive" />
+            <Trash2 size={14} color={C.red} />
           </button>
         </div>
       </div>
@@ -450,18 +450,18 @@ export const ProjectsPage: React.FC<ProjectsPageProps> = ({ onOpenProject, onNav
   }
 
   return (
-    <div style={{ padding: '32px 36px', height: '100%', overflowY: 'auto', boxSizing: 'border-box' }}>
+    <div style={{ padding: '32px 36px', height: '100%', overflowY: 'auto', boxSizing: 'border-box', background: 'var(--canvas)' }}>
       <style>{`@keyframes spin { to { transform: rotate(360deg) } } .spin { animation: spin 1s linear infinite; }`}</style>
 
        {error && (
          <div style={{ 
-           background: 'rgba(255, 91, 79, 0.08)', 
-           border: '1px solid rgba(255, 91, 79, 0.18)', 
-           borderRadius: 10, 
-           color: '#ff7f76', 
-           fontSize: 13, 
-           lineHeight: 1.6, 
-           padding: '12px 14px', 
+           background: 'rgba(207, 45, 86, 0.08)', 
+           border: '1px solid rgba(207, 45, 86, 0.18)', 
+           borderRadius: '8px', 
+           color: 'var(--semantic-error)', 
+           fontSize: 14, 
+           lineHeight: 1.5, 
+           padding: '12px 16px', 
            marginBottom: 16 
          }}>
            {error}
@@ -470,8 +470,8 @@ export const ProjectsPage: React.FC<ProjectsPageProps> = ({ onOpenProject, onNav
        {/* Header */}
        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 28 }}>
           <div>
-            <h1 className="page-title" style={{ marginBottom: 4, fontSize: 28 }}>Projects</h1>
-            <p style={{ fontSize: 14, color: 'var(--muted-foreground)' }}>{projects.length} projeto{projects.length !== 1 ? 's' : ''}</p>
+            <h1 className="page-title" style={{ marginBottom: 4, fontSize: '26px', fontWeight: 400, letterSpacing: '-0.325px' }}>Projects</h1>
+            <p style={{ fontSize: 14, color: 'var(--ink-muted)' }}>{projects.length} projeto{projects.length !== 1 ? 's' : ''}</p>
           </div>
           <button className="btn btn-primary" onClick={() => setShowModal(true)}>
             <Plus size={16} /> New Project
@@ -479,23 +479,22 @@ export const ProjectsPage: React.FC<ProjectsPageProps> = ({ onOpenProject, onNav
       </div>
 
       {loading ? (
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: '#666', fontSize: 13, marginTop: 80, justifyContent: 'center' }}>
-          <Loader2 size={14} className="spin" /> Loading projects...
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: 'var(--ink-muted)', fontSize: 14, marginTop: 80, justifyContent: 'center' }}>
+          <Loader2 size={16} className="spin" /> Loading projects...
         </div>
       ) : projects.length === 0 ? (
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12, marginTop: 80 }}>
-          <FolderOpen size={24} style={{ color: '#222' }} />
-          <p style={{ fontSize: 13, color: '#333' }}>No projects yet</p>
+          <FolderOpen size={24} style={{ color: 'var(--ink-muted)' }} />
+          <p style={{ fontSize: 14, color: 'var(--ink-muted)' }}>No projects yet</p>
           <button className="btn btn-primary" style={{ marginTop: 4 }} onClick={() => setShowModal(true)}>
-            <Plus size={13} /> New Project
+            <Plus size={14} /> New Project
           </button>
         </div>
       ) : (
         <div style={{
           display: 'grid',
           gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))',
-          gap: 12,
-          // Deixa espaço para o painel lateral quando aberto
+          gap: 16,
           marginRight: selectedProject ? 372 : 0,
           transition: 'margin-right 0.2s ease',
         }}>
@@ -515,13 +514,13 @@ export const ProjectsPage: React.FC<ProjectsPageProps> = ({ onOpenProject, onNav
             onClick={() => setShowModal(true)}
             className="card"
             style={{
-              background: 'transparent', borderStyle: 'dashed',
+              background: 'transparent', border: '1px dashed var(--hairline-strong)',
               padding: '16px 18px', cursor: 'pointer', display: 'flex', flexDirection: 'column',
               alignItems: 'center', justifyContent: 'center', gap: 12, minHeight: 140,
             }}
           >
-            <Plus size={24} className="text-muted-foreground" />
-            <span className="section-label" style={{ fontSize: 10 }}>New project</span>
+            <Plus size={24} color="var(--ink-muted)" />
+            <span className="section-label">New project</span>
           </button>
         </div>
       )}

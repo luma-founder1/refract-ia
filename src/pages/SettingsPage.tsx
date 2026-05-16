@@ -6,14 +6,13 @@ import { supabase, UserProfile } from '../lib/supabase'
 
 const C = {
   bg: 'var(--canvas)',
-  surface: 'var(--surface-1)',
+  surface: 'var(--surface-card)',
   border: 'var(--hairline)',
   text: 'var(--ink)',
   muted: 'var(--ink-muted)',
-  subtle: 'var(--surface-2)',
-  blue: 'var(--accent-blue)',
+  subtle: 'var(--surface-strong)',
   green: 'var(--semantic-success)',
-  red: '#ff5b4f',
+  red: 'var(--semantic-error)',
 }
 
 type LanguageOption = {
@@ -64,15 +63,7 @@ const toPlanLabel = (plan: UserProfile['plan']) => {
 }
 
 const SectionLabel: React.FC<{ children: React.ReactNode }> = ({ children }) => (
-  <p
-    style={{
-      fontSize: 10,
-      color: C.muted,
-      textTransform: 'uppercase',
-      letterSpacing: '1.2px',
-      marginBottom: 12,
-    }}
-  >
+  <p className="section-label" style={{ marginBottom: 12 }}>
     {children}
   </p>
 )
@@ -80,7 +71,7 @@ const SectionLabel: React.FC<{ children: React.ReactNode }> = ({ children }) => 
 const cardStyle: React.CSSProperties = {
   background: C.surface,
   border: `1px solid ${C.border}`,
-  borderRadius: 12,
+  borderRadius: '12px',
   padding: 20,
 }
 
@@ -190,11 +181,11 @@ export const SettingsPage: React.FC = () => {
 
   if (!profile) {
     return (
-      <div style={{ padding: '32px 36px', height: '100%', overflowY: 'auto', boxSizing: 'border-box' }}>
+      <div style={{ padding: '32px 36px', height: '100%', overflowY: 'auto', boxSizing: 'border-box', background: 'var(--canvas)' }}>
         <h1 className="page-title" style={{ marginBottom: 24 }}>Settings</h1>
         <div style={{ ...cardStyle, maxWidth: 640 }}>
-          <p style={{ fontSize: 14, color: C.text, marginBottom: 6 }}>Profile unavailable</p>
-          <p style={{ fontSize: 12, color: C.muted, lineHeight: 1.6 }}>
+          <p style={{ fontSize: 16, fontWeight: 600, color: C.text, marginBottom: 6 }}>Profile unavailable</p>
+          <p style={{ fontSize: 14, color: C.muted, lineHeight: 1.5 }}>
             We could not load your account data right now. Refresh the session and try again.
           </p>
         </div>
@@ -206,26 +197,26 @@ export const SettingsPage: React.FC = () => {
   const currentPlanRank = planRank[profile.plan]
 
   return (
-    <div style={{ padding: '32px 36px', height: '100%', overflowY: 'auto', boxSizing: 'border-box' }}>
-      <h1 className="page-title" style={{ marginBottom: 32 }}>Settings</h1>
+    <div style={{ padding: '32px 36px', height: '100%', overflowY: 'auto', boxSizing: 'border-box', background: 'var(--canvas)' }}>
+      <h1 className="page-title" style={{ marginBottom: 32, fontSize: '26px', fontWeight: 400, letterSpacing: '-0.325px' }}>Settings</h1>
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: 32, maxWidth: 760, paddingBottom: 48 }}>
         <section>
           <SectionLabel>Profile</SectionLabel>
           <div style={cardStyle}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 18 }}>
-              <div style={{ width: 34, height: 34, borderRadius: 10, background: C.subtle, display: 'grid', placeItems: 'center' }}>
+              <div style={{ width: 34, height: 34, borderRadius: '8px', background: C.subtle, display: 'grid', placeItems: 'center' }}>
                 <User2 size={16} color={C.text} />
               </div>
               <div>
-                <p style={{ fontSize: 14, fontWeight: 600, color: C.text, marginBottom: 2 }}>Your profile</p>
-                <p style={{ fontSize: 12, color: C.muted }}>Update the visible account details stored in Supabase.</p>
+                <p style={{ fontSize: 16, fontWeight: 600, color: C.text, marginBottom: 2 }}>Your profile</p>
+                <p style={{ fontSize: 14, color: C.muted }}>Update the visible account details stored in Supabase.</p>
               </div>
             </div>
 
             <div style={{ display: 'grid', gap: 16 }}>
               <div>
-                <label style={{ display: 'block', fontSize: 12, color: C.text, marginBottom: 8 }}>Name</label>
+                <label style={{ display: 'block', fontSize: 14, color: C.text, marginBottom: 8 }}>Name</label>
                 <input
                   className="input"
                   value={name}
@@ -235,7 +226,7 @@ export const SettingsPage: React.FC = () => {
               </div>
 
               <div>
-                <label style={{ display: 'block', fontSize: 12, color: C.text, marginBottom: 8 }}>Email</label>
+                <label style={{ display: 'block', fontSize: 14, color: C.text, marginBottom: 8 }}>Email</label>
                 <input
                   className="input"
                   value={profile.email}
@@ -253,12 +244,12 @@ export const SettingsPage: React.FC = () => {
                 disabled={!isNameDirty || isSavingName}
                 style={{ minWidth: 126, justifyContent: 'center' }}
               >
-                {isSavingName ? <Loader2 size={13} className="spin" /> : null}
+                {isSavingName ? <Loader2 size={14} className="spin" /> : null}
                 {isSavingName ? 'Saving...' : 'Save changes'}
               </button>
               {nameSaved && (
-                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12, color: C.green }}>
-                  <Check size={13} />
+                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 14, color: C.green }}>
+                  <Check size={14} />
                   Saved
                 </span>
               )}
@@ -270,12 +261,12 @@ export const SettingsPage: React.FC = () => {
           <SectionLabel>Preferences</SectionLabel>
           <div style={cardStyle}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 18 }}>
-              <div style={{ width: 34, height: 34, borderRadius: 10, background: C.subtle, display: 'grid', placeItems: 'center' }}>
+              <div style={{ width: 34, height: 34, borderRadius: '8px', background: C.subtle, display: 'grid', placeItems: 'center' }}>
                 <Globe size={16} color={C.text} />
               </div>
               <div>
-                <p style={{ fontSize: 14, fontWeight: 600, color: C.text, marginBottom: 2 }}>Language</p>
-                <p style={{ fontSize: 12, color: C.muted }}>Saved immediately after you change it.</p>
+                <p style={{ fontSize: 16, fontWeight: 600, color: C.text, marginBottom: 2 }}>Language</p>
+                <p style={{ fontSize: 14, color: C.muted }}>Saved immediately after you change it.</p>
               </div>
             </div>
 
@@ -295,7 +286,7 @@ export const SettingsPage: React.FC = () => {
                   ))}
                 </select>
               </div>
-              <span style={{ fontSize: 12, color: isSavingLanguage ? C.text : languageSaved ? C.green : C.muted }}>
+              <span style={{ fontSize: 14, color: isSavingLanguage ? C.text : languageSaved ? C.green : C.muted }}>
                 {isSavingLanguage ? 'Saving...' : languageSaved ? 'Saved' : 'Auto-saves'}
               </span>
             </div>
@@ -307,8 +298,8 @@ export const SettingsPage: React.FC = () => {
           <div style={{ ...cardStyle, paddingBottom: 16 }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16, marginBottom: 18, flexWrap: 'wrap' }}>
               <div>
-                <p style={{ fontSize: 14, fontWeight: 600, color: C.text, marginBottom: 6 }}>Your current plan</p>
-                <p style={{ fontSize: 12, color: C.muted }}>Temporary upgrade action opens the public pricing page.</p>
+                <p style={{ fontSize: 16, fontWeight: 600, color: C.text, marginBottom: 6 }}>Your current plan</p>
+                <p style={{ fontSize: 14, color: C.muted }}>Temporary upgrade action opens the public pricing page.</p>
               </div>
               <span className="badge badge-muted" style={{ fontSize: 11, padding: '4px 10px', textTransform: 'capitalize' }}>
                 {toPlanLabel(profile.plan)}
@@ -325,9 +316,9 @@ export const SettingsPage: React.FC = () => {
                   <div
                     key={plan.name}
                     style={{
-                      background: isCurrentPlan ? 'linear-gradient(180deg, rgba(10,114,239,0.12) 0%, rgba(10,114,239,0.03) 100%)' : C.bg,
-                      border: `1px solid ${isCurrentPlan ? 'rgba(10,114,239,0.35)' : C.border}`,
-                      borderRadius: 12,
+                      background: isCurrentPlan ? 'rgba(245, 78, 0, 0.06)' : 'var(--canvas-soft)',
+                      border: `1px solid ${isCurrentPlan ? 'rgba(245, 78, 0, 0.25)' : 'var(--hairline)'}`,
+                      borderRadius: '12px',
                       padding: 16,
                       minHeight: 190,
                       display: 'flex',
@@ -335,19 +326,19 @@ export const SettingsPage: React.FC = () => {
                     }}
                   >
                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginBottom: 10 }}>
-                      <p style={{ fontSize: 14, fontWeight: 600, color: C.text }}>{plan.title}</p>
+                      <p style={{ fontSize: 16, fontWeight: 600, color: C.text }}>{plan.title}</p>
                       {isCurrentPlan ? (
-                        <span className="badge badge-medium" style={{ fontSize: 10, padding: '2px 8px' }}>Current</span>
+                        <span className="badge badge-success" style={{ fontSize: 10, padding: '2px 8px' }}>Current</span>
                       ) : null}
                     </div>
 
                     <p style={{ fontSize: 22, fontWeight: 600, color: C.text, letterSpacing: '-0.03em', marginBottom: 8 }}>
                       {plan.price}
-                      <span style={{ fontSize: 12, fontWeight: 500, color: C.muted, marginLeft: 4 }}>
+                      <span style={{ fontSize: 14, fontWeight: 500, color: C.muted, marginLeft: 4 }}>
                         {plan.name === 'enterprise' ? '/mo+' : '/mo'}
                       </span>
                     </p>
-                    <p style={{ fontSize: 12, color: C.muted, lineHeight: 1.6, marginBottom: 18 }}>
+                    <p style={{ fontSize: 14, color: C.muted, lineHeight: 1.5, marginBottom: 18 }}>
                       {plan.description}
                     </p>
 
@@ -366,11 +357,11 @@ export const SettingsPage: React.FC = () => {
                           style={{
                             width: '100%',
                             minHeight: 34,
-                            borderRadius: 10,
+                            borderRadius: '8px',
                             background: C.subtle,
                             display: 'grid',
                             placeItems: 'center',
-                            fontSize: 12,
+                            fontSize: 14,
                             color: isCurrentPlan ? C.text : C.muted,
                             fontWeight: 500,
                           }}
@@ -388,14 +379,14 @@ export const SettingsPage: React.FC = () => {
 
         <section>
           <SectionLabel>Danger Zone</SectionLabel>
-          <div style={{ ...cardStyle, borderColor: 'rgba(255,91,79,0.2)' }}>
+          <div style={{ ...cardStyle, borderColor: 'rgba(207, 45, 86, 0.2)' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 18 }}>
-              <div style={{ width: 34, height: 34, borderRadius: 10, background: 'rgba(255,91,79,0.08)', display: 'grid', placeItems: 'center' }}>
+              <div style={{ width: 34, height: 34, borderRadius: '8px', background: 'rgba(207, 45, 86, 0.08)', display: 'grid', placeItems: 'center' }}>
                 <ShieldAlert size={16} color={C.red} />
               </div>
               <div>
-                <p style={{ fontSize: 14, fontWeight: 600, color: C.text, marginBottom: 2 }}>Sensitive actions</p>
-                <p style={{ fontSize: 12, color: C.muted }}>These actions affect your session and account access.</p>
+                <p style={{ fontSize: 16, fontWeight: 600, color: C.text, marginBottom: 2 }}>Sensitive actions</p>
+                <p style={{ fontSize: 14, color: C.muted }}>These actions affect your session and account access.</p>
               </div>
             </div>
 
@@ -406,7 +397,7 @@ export const SettingsPage: React.FC = () => {
                 disabled={isSigningOut}
                 style={{ minWidth: 120, justifyContent: 'center' }}
               >
-                {isSigningOut ? <Loader2 size={13} className="spin" /> : <LogOut size={13} />}
+                {isSigningOut ? <Loader2 size={14} className="spin" /> : <LogOut size={14} />}
                 {isSigningOut ? 'Signing out...' : 'Sign out'}
               </button>
 
@@ -416,11 +407,11 @@ export const SettingsPage: React.FC = () => {
                   minWidth: 140,
                   height: 34,
                   padding: '0 14px',
-                  borderRadius: 10,
-                  border: '1px solid rgba(255,91,79,0.25)',
-                  background: 'rgba(255,91,79,0.08)',
+                  borderRadius: '8px',
+                  border: '1px solid rgba(207, 45, 86, 0.25)',
+                  background: 'rgba(207, 45, 86, 0.08)',
                   color: C.red,
-                  fontSize: 12,
+                  fontSize: 14,
                   fontWeight: 600,
                   cursor: 'pointer',
                 }}

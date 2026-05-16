@@ -68,35 +68,35 @@ export const HomePage: React.FC<HomePageProps> = ({ onNavigate }) => {
   const analysedCount = projects.filter((p: Project) => normalizeStatus(p.status) === 'Refracted').length
 
   return (
-    <div style={{ padding: '64px 40px', height: '100%', overflowY: 'auto', boxSizing: 'border-box' }}>
+    <div style={{ padding: '80px 40px', height: '100%', overflowY: 'auto', boxSizing: 'border-box', background: 'var(--canvas)' }}>
       <style>{`
         @keyframes fadeUp { from { opacity: 0; transform: translateY(12px) } to { opacity: 1; transform: translateY(0) } }
       `}</style>
 
        {/* Hero Section */}
-       <div style={{ marginBottom: 96, animation: 'fadeUp 0.4s ease', maxWidth: 800 }}>
+       <div style={{ marginBottom: 80, animation: 'fadeUp 0.4s ease', maxWidth: 800 }}>
          {error && (
            <div style={{ 
-             background: 'rgba(255, 91, 79, 0.08)', 
-             border: '1px solid rgba(255, 91, 79, 0.18)', 
-             borderRadius: 10, 
-             color: '#ff7f76', 
-             fontSize: 13, 
-             lineHeight: 1.6, 
-             padding: '12px 14px', 
+             background: 'rgba(207, 45, 86, 0.08)', 
+             border: '1px solid rgba(207, 45, 86, 0.18)', 
+             borderRadius: '8px', 
+             color: 'var(--semantic-error)', 
+             fontSize: '14px', 
+             lineHeight: 1.5, 
+             padding: '12px 16px', 
              marginBottom: 16 
            }}>
              {error}
            </div>
          )}
-         <h1 className="page-title" style={{ marginBottom: 24 }}>
+         <h1 className="page-title" style={{ marginBottom: 16, fontSize: '36px', fontWeight: 400, letterSpacing: '-0.72px', lineHeight: 1.2 }}>
            {greeting()}
          </h1>
          <p style={{ 
-           fontSize: 24, 
-           color: 'var(--ink-muted)', 
-           lineHeight: 1.3, 
-           letterSpacing: '-0.01px', 
+           fontSize: '16px', 
+           color: 'var(--body)', 
+           lineHeight: 1.5, 
+           letterSpacing: 0,
            maxWidth: 600,
            fontFamily: 'var(--font-sans)',
            marginBottom: 32
@@ -120,9 +120,9 @@ export const HomePage: React.FC<HomePageProps> = ({ onNavigate }) => {
       </div>
 
       {/* ── Recent Projects ───────────────────────────────────────────────────── */}
-      <div style={{ animation: 'fadeUp 0.4s ease 0.15s both', marginBottom: 96 }}>
+      <div style={{ animation: 'fadeUp 0.4s ease 0.15s both', marginBottom: 80 }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 24 }}>
-          <h2 style={{ fontSize: 32, letterSpacing: '-1.0px', color: 'var(--ink)' }}>Recent Projects</h2>
+          <h2 style={{ fontSize: '26px', fontWeight: 400, letterSpacing: '-0.325px', color: 'var(--ink)', lineHeight: 1.25, fontFamily: 'var(--font-sans)' }}>Recent Projects</h2>
           {hasProjects && (
             <button
               onClick={() => onNavigate('projects')}
@@ -133,12 +133,12 @@ export const HomePage: React.FC<HomePageProps> = ({ onNavigate }) => {
           )}
         </div>
 
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: 20 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: 16 }}>
           {loading ? (
             [1, 2, 3].map(i => (
               <div key={i} className="card" style={{ minHeight: 110, opacity: 0.5, padding: '16px 20px' }}>
-                <div style={{ width: '60%', height: 14, background: 'var(--surface-2)', borderRadius: 4, marginBottom: 16 }} />
-                <div style={{ width: '40%', height: 12, background: 'var(--surface-2)', borderRadius: 4 }} />
+                <div style={{ width: '60%', height: 14, background: 'var(--canvas-soft)', borderRadius: '4px', marginBottom: 16 }} />
+                <div style={{ width: '40%', height: 12, background: 'var(--canvas-soft)', borderRadius: '4px' }} />
               </div>
             ))
           ) : (
@@ -151,17 +151,17 @@ export const HomePage: React.FC<HomePageProps> = ({ onNavigate }) => {
                    style={{ cursor: 'pointer', display: 'flex', flexDirection: 'column', minHeight: 110, padding: '16px 20px' }}
                  >
                    <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 10 }}>
-                     <span style={{ fontSize: 16, fontWeight: 600, letterSpacing: '-0.3px', color: 'var(--ink)' }}>{p.name}</span>
+                     <span style={{ fontSize: '16px', fontWeight: 600, letterSpacing: 0, color: 'var(--ink)' }}>{p.name}</span>
                      <StatusBadge status={normalizeStatus(p.status)} />
                    </div>
-                   <p style={{ fontSize: 13, color: 'var(--ink-muted)', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', marginBottom: 16 }}>
+                   <p style={{ fontSize: '14px', color: 'var(--ink-muted)', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', marginBottom: 16, lineHeight: 1.5 }}>
                      {p.repo || p.path || ''}
                    </p>
                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 'auto' }}>
                      <span className="badge badge-muted">
                        <GitBranch size={11} /> {p.branch || 'main'}
                      </span>
-                     <span style={{ fontSize: 12, color: 'var(--ink-muted)' }}>
+                     <span style={{ fontSize: '13px', color: 'var(--ink-muted)' }}>
                        {p.last_run ? new Date(p.last_run).toLocaleDateString('en-US') : 'Never'}
                      </span>
                    </div>
@@ -175,26 +175,26 @@ export const HomePage: React.FC<HomePageProps> = ({ onNavigate }) => {
       {/* ── What Refract does ─────────────── */}
       {!loading && !hasProjects && (
         <div style={{ animation: 'fadeUp 0.4s ease 0.2s both' }}>
-          <p style={{ fontSize: 10, color: 'var(--ink-muted)', textTransform: 'uppercase', letterSpacing: '1.2px', marginBottom: 16 }}>
+          <p className="section-label" style={{ marginBottom: 16 }}>
             What Refract does
           </p>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 16 }}>
             <div className="card" style={{ padding: 24 }}>
               <div style={{ marginBottom: 12, color: 'var(--ink)' }}><Zap size={18} /></div>
-              <p style={{ fontSize: 14, fontWeight: 600, letterSpacing: '-0.02em', color: 'var(--ink)', marginBottom: 8 }}>Real AST analysis</p>
-              <p style={{ fontSize: 13, color: 'var(--ink-muted)', lineHeight: 1.6 }}>Detects any types, dead state, circular deps, useEffect without deps and more.</p>
+              <p style={{ fontSize: '16px', fontWeight: 600, letterSpacing: 0, color: 'var(--ink)', marginBottom: 8, fontFamily: 'var(--font-sans)' }}>Real AST analysis</p>
+              <p style={{ fontSize: '14px', color: 'var(--ink-muted)', lineHeight: 1.5 }}>Detects any types, dead state, circular deps, useEffect without deps and more.</p>
             </div>
             
             <div className="card" style={{ padding: 24 }}>
               <div style={{ marginBottom: 12, color: 'var(--ink)' }}><Activity size={18} /></div>
-              <p style={{ fontSize: 14, fontWeight: 600, letterSpacing: '-0.02em', color: 'var(--ink)', marginBottom: 8 }}>Health Score</p>
-              <p style={{ fontSize: 13, color: 'var(--ink-muted)', lineHeight: 1.6 }}>0-100 score per project. See degradation before it becomes a problem.</p>
+              <p style={{ fontSize: '16px', fontWeight: 600, letterSpacing: 0, color: 'var(--ink)', marginBottom: 8, fontFamily: 'var(--font-sans)' }}>Health Score</p>
+              <p style={{ fontSize: '14px', color: 'var(--ink-muted)', lineHeight: 1.5 }}>0-100 score per project. See degradation before it becomes a problem.</p>
             </div>
 
             <div className="card" style={{ padding: 24 }}>
               <div style={{ marginBottom: 12, color: 'var(--ink)' }}><Wrench size={18} /></div>
-              <p style={{ fontSize: 14, fontWeight: 600, letterSpacing: '-0.02em', color: 'var(--ink)', marginBottom: 8 }}>Safe apply</p>
-              <p style={{ fontSize: 13, color: 'var(--ink-muted)', lineHeight: 1.6 }}>Suggestions with diff before applying. Patch by anchor, not by line.</p>
+              <p style={{ fontSize: '16px', fontWeight: 600, letterSpacing: 0, color: 'var(--ink)', marginBottom: 8, fontFamily: 'var(--font-sans)' }}>Safe apply</p>
+              <p style={{ fontSize: '14px', color: 'var(--ink-muted)', lineHeight: 1.5 }}>Suggestions with diff before applying. Patch by anchor, not by line.</p>
             </div>
           </div>
         </div>

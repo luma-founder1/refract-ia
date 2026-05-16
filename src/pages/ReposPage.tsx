@@ -193,18 +193,18 @@ export const ReposPage: React.FC<{ onNavigate: (page: string, params?: any) => v
   }
 
   return (
-    <div style={{ padding: '32px 36px', height: '100%', overflowY: 'auto', background: 'var(--background)' }}>
+    <div style={{ padding: '32px 36px', height: '100%', overflowY: 'auto', background: 'var(--canvas)' }}>
       <style>{`
         @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
         .spin { animation: spin 1.5s cubic-bezier(0.4, 0, 0.2, 1) infinite; }
         @keyframes pulse { 0% { opacity: 0.3 } 50% { opacity: 0.6 } 100% { opacity: 0.3 } }
-        .skeleton { background: var(--muted); border-radius: var(--radius); animation: pulse 1.5s infinite ease-in-out; }
+        .skeleton { background: var(--surface-strong); border-radius: 8px; animation: pulse 1.5s infinite ease-in-out; }
       `}</style>
 
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 24, gap: 16 }}>
         <div>
-          <h1 className="page-title" style={{ fontSize: 28, marginBottom: 6 }}>Repositories</h1>
-          <p style={{ fontSize: 13, color: 'var(--muted-foreground)' }}>
+          <h1 className="page-title" style={{ fontSize: '26px', fontWeight: 400, letterSpacing: '-0.325px', marginBottom: 6 }}>Repositories</h1>
+          <p style={{ fontSize: 14, color: 'var(--ink-muted)' }}>
             Browse your GitHub repositories and clone one directly into Refract for analysis.
           </p>
         </div>
@@ -216,16 +216,16 @@ export const ReposPage: React.FC<{ onNavigate: (page: string, params?: any) => v
             display: 'flex',
             alignItems: 'flex-start',
             gap: 10,
-            padding: '12px 14px',
-            borderRadius: 12,
+            padding: '12px 16px',
+            borderRadius: '8px',
             marginBottom: 20,
-            background: 'rgba(255, 91, 79, 0.08)',
-            border: '1px solid rgba(255, 91, 79, 0.18)',
-            color: '#ff7f76',
+            background: 'rgba(207, 45, 86, 0.08)',
+            border: '1px solid rgba(207, 45, 86, 0.18)',
+            color: 'var(--semantic-error)',
           }}
         >
           <AlertCircle size={16} style={{ flexShrink: 0, marginTop: 1 }} />
-          <span style={{ fontSize: 12, lineHeight: 1.6 }}>{error}</span>
+          <span style={{ fontSize: 14, lineHeight: 1.5 }}>{error}</span>
         </div>
       )}
 
@@ -241,12 +241,12 @@ export const ReposPage: React.FC<{ onNavigate: (page: string, params?: any) => v
           }}
         >
           <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-            <div style={{ width: 44, height: 44, borderRadius: 12, background: 'var(--accent)', display: 'grid', placeItems: 'center' }}>
+            <div style={{ width: 44, height: 44, borderRadius: '8px', background: 'var(--canvas-soft)', display: 'grid', placeItems: 'center' }}>
               <GitHubIcon size={22} />
             </div>
             <div>
-              <p style={{ fontSize: 16, fontWeight: 600, color: 'var(--foreground)', marginBottom: 4 }}>Connect GitHub</p>
-              <p style={{ fontSize: 13, color: 'var(--muted-foreground)', lineHeight: 1.6 }}>
+              <p style={{ fontSize: 18, fontWeight: 600, color: 'var(--ink)', marginBottom: 4 }}>Connect GitHub</p>
+              <p style={{ fontSize: 14, color: 'var(--ink-muted)', lineHeight: 1.5 }}>
                 Connect your GitHub account to list repositories, pick a branch, and clone projects straight into the analysis flow.
               </p>
             </div>
@@ -258,17 +258,17 @@ export const ReposPage: React.FC<{ onNavigate: (page: string, params?: any) => v
             className="btn btn-primary"
             style={{ alignSelf: 'flex-start', gap: 8 }}
           >
-            {connectingGitHub ? <Loader2 size={15} className="spin" /> : <Github size={15} />}
+            {connectingGitHub ? <Loader2 size={16} className="spin" /> : <Github size={16} />}
             {connectingGitHub ? 'Connecting...' : 'Connect GitHub'}
           </button>
         </div>
       ) : (
         <>
           <div style={{ position: 'relative', marginBottom: 20 }}>
-            <Search size={16} style={{ position: 'absolute', left: 14, top: '50%', transform: 'translateY(-50%)', color: 'var(--muted-foreground)' }} />
+            <Search size={16} style={{ position: 'absolute', left: 14, top: '50%', transform: 'translateY(-50%)', color: 'var(--ink-muted)' }} />
             <input
               className="input"
-              style={{ width: '100%', height: 40, paddingLeft: 40 }}
+              style={{ width: '100%', height: 44, paddingLeft: 40 }}
               placeholder="Search repositories, descriptions, or languages..."
               value={search}
               onChange={(event) => setSearch(event.target.value)}
@@ -280,7 +280,7 @@ export const ReposPage: React.FC<{ onNavigate: (page: string, params?: any) => v
               <span
                 key={column}
                 className="section-label"
-                style={{ width: ['40%', '16%', '19%', '25%'][index], fontSize: 10 }}
+                style={{ width: ['40%', '16%', '19%', '25%'][index], fontSize: 11 }}
               >
                 {column}
               </span>
@@ -292,7 +292,7 @@ export const ReposPage: React.FC<{ onNavigate: (page: string, params?: any) => v
               Array.from({ length: 5 }).map((_, index) => (
                 <div
                   key={index}
-                  style={{ height: 62, display: 'flex', alignItems: 'center', padding: '0 16px', borderBottom: index === 4 ? 'none' : '1px solid var(--border)' }}
+                  style={{ height: 62, display: 'flex', alignItems: 'center', padding: '0 16px', borderBottom: index === 4 ? 'none' : '1px solid var(--hairline)' }}
                 >
                   <div style={{ width: '40%' }}><div className="skeleton" style={{ width: '70%', height: 12 }} /></div>
                   <div style={{ width: '16%' }}><div className="skeleton" style={{ width: 60, height: 12 }} /></div>
@@ -302,8 +302,8 @@ export const ReposPage: React.FC<{ onNavigate: (page: string, params?: any) => v
               ))
             ) : filteredRepos.length === 0 ? (
               <div style={{ padding: '44px 24px', textAlign: 'center' }}>
-                <p style={{ fontSize: 14, color: 'var(--foreground)', marginBottom: 6 }}>No repositories found.</p>
-                <p style={{ fontSize: 12, color: 'var(--muted-foreground)' }}>
+                <p style={{ fontSize: 16, color: 'var(--ink)', marginBottom: 6 }}>No repositories found.</p>
+                <p style={{ fontSize: 14, color: 'var(--ink-muted)' }}>
                   Try another search term or reconnect GitHub if the list looks incomplete.
                 </p>
               </div>
@@ -316,36 +316,36 @@ export const ReposPage: React.FC<{ onNavigate: (page: string, params?: any) => v
                     alignItems: 'center',
                     minHeight: 62,
                     padding: '10px 16px',
-                    borderBottom: index === filteredRepos.length - 1 ? 'none' : '1px solid var(--border)',
+                    borderBottom: index === filteredRepos.length - 1 ? 'none' : '1px solid var(--hairline)',
                   }}
                 >
                   <div style={{ width: '40%', display: 'flex', alignItems: 'flex-start', gap: 10, minWidth: 0 }}>
                     <GitHubIcon size={16} />
                     <div style={{ minWidth: 0 }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
-                        <span style={{ fontSize: 14, color: 'var(--foreground)', fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        <span style={{ fontSize: 16, color: 'var(--ink)', fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                           {repo.full_name}
                         </span>
                         {repo.language && (
-                          <span className="badge badge-muted" style={{ padding: '2px 8px', fontSize: 10 }}>
+                          <span className="badge badge-muted" style={{ padding: '2px 8px', fontSize: 11 }}>
                             {repo.language}
                           </span>
                         )}
                       </div>
-                      <p style={{ fontSize: 12, color: 'var(--muted-foreground)', lineHeight: 1.5 }}>
+                      <p style={{ fontSize: 14, color: 'var(--ink-muted)', lineHeight: 1.5 }}>
                         {repo.description || 'No description provided.'}
                       </p>
                     </div>
                   </div>
 
                   <div style={{ width: '16%' }}>
-                    <span className={repo.private ? 'badge badge-error' : 'badge badge-success'} style={{ padding: '2px 8px', fontSize: 10, textTransform: 'uppercase' }}>
+                    <span className={repo.private ? 'badge badge-muted' : 'badge badge-success'} style={{ padding: '2px 8px', fontSize: 11, textTransform: 'uppercase' }}>
                       {repo.private ? <Lock size={10} style={{ marginRight: 4 }} /> : <Globe size={10} style={{ marginRight: 4 }} />}
                       {repo.private ? 'Private' : 'Public'}
                     </span>
                   </div>
 
-                  <div style={{ width: '19%', fontSize: 12, color: 'var(--muted-foreground)' }}>
+                  <div style={{ width: '19%', fontSize: 14, color: 'var(--ink-muted)' }}>
                     {new Date(repo.updated_at).toLocaleDateString('en-US')}
                   </div>
 
@@ -357,7 +357,7 @@ export const ReposPage: React.FC<{ onNavigate: (page: string, params?: any) => v
                       className="btn btn-ghost btn-sm"
                       style={{ gap: 6 }}
                     >
-                      <ExternalLink size={13} /> Open
+                      <ExternalLink size={14} /> Open
                     </a>
                     <button
                       onClick={() => handleOpenBranchModal(repo)}
@@ -365,7 +365,7 @@ export const ReposPage: React.FC<{ onNavigate: (page: string, params?: any) => v
                       disabled={loadingBranchesFor === repo.id || cloningRepoId === repo.id}
                       style={{ gap: 6, minWidth: 126, justifyContent: 'center' }}
                     >
-                      {loadingBranchesFor === repo.id ? <Loader2 size={13} className="spin" /> : <Download size={13} />}
+                      {loadingBranchesFor === repo.id ? <Loader2 size={14} className="spin" /> : <Download size={14} />}
                       Clone & Analyse
                     </button>
                   </div>
@@ -406,19 +406,19 @@ export const ReposPage: React.FC<{ onNavigate: (page: string, params?: any) => v
             </button>
 
             <div style={{ marginBottom: 24 }}>
-              <p style={{ fontSize: 18, fontWeight: 600, color: 'var(--foreground)', marginBottom: 8 }}>
+              <p style={{ fontSize: 22, fontWeight: 400, color: 'var(--ink)', marginBottom: 8, letterSpacing: '-0.11px' }}>
                 Clone & Analyse
               </p>
-              <p style={{ fontSize: 13, color: 'var(--muted-foreground)', lineHeight: 1.6 }}>
+              <p style={{ fontSize: 14, color: 'var(--ink-muted)', lineHeight: 1.5 }}>
                 Choose the branch you want to load from <strong>{branchModal.repo.full_name}</strong>.
               </p>
             </div>
 
-            <label style={{ display: 'block', fontSize: 12, color: 'var(--foreground)', marginBottom: 8 }}>
+            <label style={{ display: 'block', fontSize: 14, color: 'var(--ink)', marginBottom: 8 }}>
               Branch
             </label>
             <div style={{ position: 'relative', marginBottom: 24 }}>
-              <GitBranch size={15} style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', color: 'var(--muted-foreground)' }} />
+              <GitBranch size={15} style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', color: 'var(--ink-muted)' }} />
               <select
                 className="input"
                 value={branchModal.selectedBranch}
@@ -435,7 +435,7 @@ export const ReposPage: React.FC<{ onNavigate: (page: string, params?: any) => v
             </div>
 
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
-              <p style={{ fontSize: 12, color: 'var(--muted-foreground)' }}>
+              <p style={{ fontSize: 14, color: 'var(--ink-muted)' }}>
                 {cloningRepoId === branchModal.repo.id ? 'A clonar repositório...' : 'The repository will be loaded into the in-app analysis flow.'}
               </p>
               <button
@@ -445,7 +445,7 @@ export const ReposPage: React.FC<{ onNavigate: (page: string, params?: any) => v
                 disabled={cloningRepoId === branchModal.repo.id}
                 style={{ gap: 8, minWidth: 152, justifyContent: 'center' }}
               >
-                {cloningRepoId === branchModal.repo.id ? <Loader2 size={14} className="spin" /> : <Download size={14} />}
+                {cloningRepoId === branchModal.repo.id ? <Loader2 size={16} className="spin" /> : <Download size={16} />}
                 {cloningRepoId === branchModal.repo.id ? 'Cloning...' : 'Clone & Analyse'}
               </button>
             </div>

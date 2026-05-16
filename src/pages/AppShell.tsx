@@ -25,13 +25,14 @@ class ErrorBoundary extends React.Component<{ children?: React.ReactNode }, { ha
   render() {
     if (this.state.hasError) {
       return (
-        <div style={{ padding: 40, color: '#fff', background: '#0a0a0a', minHeight: '100vh' }}>
-          <p style={{ color: '#ef4444', fontFamily: 'monospace', fontSize: 13 }}>
+        <div style={{ padding: 40, color: 'var(--ink)', background: 'var(--canvas)', minHeight: '100vh' }}>
+          <p style={{ color: 'var(--semantic-error)', fontFamily: 'var(--font-mono)', fontSize: 14 }}>
             {this.state.error}
           </p>
           <button
             onClick={() => this.setState({ hasError: false, error: null })}
-            style={{ marginTop: 16, padding: '8px 16px', background: '#3B82F6', color: '#fff', border: 'none', borderRadius: 6, cursor: 'pointer' }}
+            className="btn btn-primary"
+            style={{ marginTop: 16 }}
           >
             Tentar novamente
           </button>
@@ -116,7 +117,7 @@ export const AppShell: React.FC = () => {
   };
 
   return (
-    <div style={{ display: 'flex', height: '100vh', width: '100vw', overflow: 'hidden', background: 'var(--background)' }}>
+    <div style={{ display: 'flex', height: '100vh', width: '100vw', overflow: 'hidden', background: 'var(--canvas)' }}>
       {activePage !== 'projectView' && (
         <Sidebar activePage={activePage} onNavigate={(p) => handleNavigate(p)} />
       )}

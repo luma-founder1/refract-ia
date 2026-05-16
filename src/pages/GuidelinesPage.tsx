@@ -67,22 +67,22 @@ export const GuidelinesPage: React.FC = () => {
   const saveGlobalGuideline = async () => {
     setIsGlobalSaving(true);
     await setSetting('global_guidelines', globalText);
-    setTimeout(() => setIsGlobalSaving(false), 500); // small delay for UX
+    setTimeout(() => setIsGlobalSaving(false), 500);
   };
 
   return (
-    <div style={{ padding: '32px 36px', height: '100%', overflowY: 'auto' }}>
+    <div style={{ padding: '32px 36px', height: '100%', overflowY: 'auto', background: 'var(--canvas)' }}>
       {/* Header */}
       <div style={{ marginBottom: 32 }}>
-        <h1 className="page-title" style={{ marginBottom: 6, fontSize: 28 }}>Guidelines</h1>
-        <p style={{ fontSize: 14, color: 'var(--muted-foreground)' }}>
+        <h1 className="page-title" style={{ marginBottom: 6, fontSize: '26px', fontWeight: 400, letterSpacing: '-0.325px' }}>Guidelines</h1>
+        <p style={{ fontSize: 14, color: 'var(--ink-muted)' }}>
           Define rules for how Refract should transform your code.
         </p>
       </div>
 
       {isLoading ? (
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: '#666', fontSize: 13 }}>
-          <Loader size={14} className="spin" /> Loading guidelines...
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: 'var(--ink-muted)', fontSize: 14 }}>
+          <Loader size={16} className="spin" /> Loading guidelines...
         </div>
       ) : (
         <>
@@ -90,7 +90,7 @@ export const GuidelinesPage: React.FC = () => {
           <p className="section-label" style={{ marginBottom: 14 }}>Per project</p>
           
           {projects.length === 0 ? (
-            <div style={{ padding: 20, border: '1px dashed var(--border)', borderRadius: 'var(--radius)', fontSize: 14, color: 'var(--muted-foreground)', marginBottom: 24, textAlign: 'center' }}>
+            <div style={{ padding: 20, border: '1px dashed var(--hairline-strong)', borderRadius: '12px', fontSize: 14, color: 'var(--ink-muted)', marginBottom: 24, textAlign: 'center' }}>
               No local projects found. Create or open a project first.
             </div>
           ) : (
@@ -102,7 +102,7 @@ export const GuidelinesPage: React.FC = () => {
               >
                 {/* Top row */}
                 <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 14 }}>
-                  <span style={{ fontSize: 14, fontWeight: 600, color: 'var(--foreground)' }}>{p.project.name}</span>
+                  <span style={{ fontSize: 16, fontWeight: 600, color: 'var(--ink)' }}>{p.project.name}</span>
                   <span className="badge badge-muted" style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
                     <GitBranch size={9} />{p.project.branch}
                   </span>
@@ -110,8 +110,8 @@ export const GuidelinesPage: React.FC = () => {
 
                 {/* Textarea */}
                 <textarea
-                  className="input font-mono"
-                  style={{ minHeight: 100, padding: '12px 14px', fontSize: 12, resize: 'vertical', width: '100%', boxSizing: 'border-box' }}
+                  className="textarea font-mono"
+                  style={{ minHeight: 100, padding: '12px 14px', fontSize: 14, resize: 'vertical', width: '100%', boxSizing: 'border-box' }}
                   placeholder="Write your guidelines in plain language. Example: Always use named exports. Never use any types. Split components larger than 150 lines."
                   value={p.text}
                   onChange={e => updateText(p.project.id, e.target.value)}
@@ -131,10 +131,10 @@ export const GuidelinesPage: React.FC = () => {
                     onClick={() => saveProjectGuideline(p.project.id)}
                     disabled={p.isSaving}
                   >
-                    {p.isSaving ? <Loader size={11} className="spin" /> : <Save size={11} />}
+                    {p.isSaving ? <Loader size={14} className="spin" /> : <Save size={14} />}
                     {p.isSaving ? 'Saving...' : 'Save'}
                   </button>
-                  <span style={{ fontSize: 11, color: 'var(--muted-foreground)' }}>Last saved {p.savedAt}</span>
+                  <span style={{ fontSize: 13, color: 'var(--ink-muted)' }}>Last saved {p.savedAt}</span>
                 </div>
               </div>
             ))
@@ -143,11 +143,11 @@ export const GuidelinesPage: React.FC = () => {
           {/* Global guidelines */}
           <div style={{ marginTop: 36, paddingBottom: 64 }}>
             <p className="section-label" style={{ marginBottom: 14 }}>Global</p>
-            <p style={{ fontSize: 12, color: 'var(--muted-foreground)', marginBottom: 12 }}>Applied to all projects.</p>
+            <p style={{ fontSize: 14, color: 'var(--ink-muted)', marginBottom: 12 }}>Applied to all projects.</p>
 
             <textarea
-              className="input font-mono"
-              style={{ minHeight: 140, padding: '12px 14px', fontSize: 12, resize: 'vertical', width: '100%', boxSizing: 'border-box' }}
+              className="textarea font-mono"
+              style={{ minHeight: 140, padding: '12px 14px', fontSize: 14, resize: 'vertical', width: '100%', boxSizing: 'border-box' }}
               placeholder="Write your guidelines in plain language. Example: Always use named exports. Never use any types. Split components larger than 150 lines."
               value={globalText}
               onChange={e => setGlobalText(e.target.value)}
@@ -159,7 +159,7 @@ export const GuidelinesPage: React.FC = () => {
               onClick={saveGlobalGuideline}
               disabled={isGlobalSaving}
             >
-              {isGlobalSaving ? <Loader size={11} className="spin" /> : <Save size={11} />}
+              {isGlobalSaving ? <Loader size={14} className="spin" /> : <Save size={14} />}
               {isGlobalSaving ? 'Saving...' : 'Save global guidelines'}
             </button>
           </div>
@@ -168,4 +168,3 @@ export const GuidelinesPage: React.FC = () => {
     </div>
   );
 };
-
