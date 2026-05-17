@@ -42,7 +42,7 @@ function getInlineError(error: unknown, fallback: string): string {
 }
 
 export const NewProjectModal: React.FC<Props> = ({ onClose, onProjectCreated, onNavigate }) => {
-  const { profile, continueWithGitHub } = useAuth()
+  const { profile, continueWithGitHub, reconnectGitHub } = useAuth()
   const { setFileMap } = useFiles()
 
   const [repos, setRepos] = useState<GitHubRepo[]>([])
@@ -147,7 +147,9 @@ export const NewProjectModal: React.FC<Props> = ({ onClose, onProjectCreated, on
   const handleConnectGitHub = async () => {
     setError(null)
     setConnectingGitHub(true)
-    const { error: oauthError } = await continueWithGitHub()
+    const { error: oauthError } = profile?.id
+      ? await reconnectGitHub()
+      : await continueWithGitHub()
     if (oauthError) {
       setError(oauthError.message || 'Failed to connect GitHub.')
       setConnectingGitHub(false)

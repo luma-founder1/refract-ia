@@ -37,7 +37,7 @@ interface BranchModalState {
 }
 
 export const ReposPage: React.FC<{ onNavigate: (page: string, params?: any) => void }> = ({ onNavigate }) => {
-  const { profile, continueWithGitHub } = useAuth()
+  const { profile, continueWithGitHub, reconnectGitHub } = useAuth()
   const { setFileMap } = useFiles()
   const [repos, setRepos] = useState<GitHubRepo[]>([])
   const [loading, setLoading] = useState(false)
@@ -103,7 +103,10 @@ export const ReposPage: React.FC<{ onNavigate: (page: string, params?: any) => v
   const handleConnectGitHub = async () => {
     setError(null)
     setConnectingGitHub(true)
-    const { error: oauthError } = await continueWithGitHub()
+    // If user already has a session, reconnect (sign out + fresh OAuth) to capture provider_token
+    const { error: oauthError } = profile?.id
+      ? await reconnectGitHub()
+      : await continueWithGitHub()
     if (oauthError) {
       setError(oauthError.message || 'Failed to connect GitHub.')
       setConnectingGitHub(false)

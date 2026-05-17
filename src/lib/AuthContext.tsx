@@ -14,6 +14,7 @@ interface AuthContextValue {
   signIn: (email: string, password: string) => Promise<{ error: Error | null }>
   signUp: (email: string, password: string) => Promise<{ error: Error | null }>
   continueWithGitHub: () => Promise<{ error: Error | null }>
+  reconnectGitHub: () => Promise<{ error: Error | null }>
 }
 
 // ─── Context ──────────────────────────────────────────────────────────────────
@@ -27,6 +28,7 @@ const AuthContext = createContext<AuthContextValue>({
   signIn: async () => ({ error: null }),
   signUp: async () => ({ error: null }),
   continueWithGitHub: async () => ({ error: null }),
+  reconnectGitHub: async () => ({ error: null }),
 })
 
 export const useAuth = () => useContext(AuthContext)
@@ -135,6 +137,23 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       return { error: error ?? null }
     } catch (err) {
       return { error: err instanceof Error ? err : new Error('GitHub sign in failed') }
+    }
+  }, [])
+
+  const reconnectGitHub = useCallback(async () => {
+    try {
+      await supabase.auth.signOut({ scope: 'local' })
+      setSession(null)
+      setProfile(null)
+      loadingDone.current = false
+      setLoading(true)
+      const { error } = await supabase.auth.signInWithOAuth({
+        provider: 'github',
+        options: { scopes: 'repo read:user', redirectTo: window.location.origin },
+      })
+      return { error: error ?? null }
+    } catch (err) {
+      return { error: err instanceof Error ? err : new Error('GitHub reconnect failed') }
     }
   }, [])
 
@@ -255,7 +274,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   }, [fetchProfile])
 
   return (
-    <AuthContext.Provider value={{ session, profile, loading, refreshProfile, signOut, signIn, signUp, continueWithGitHub }}>
+    <AuthContext.Provider value={{ session, profile, loading, refreshProfile, signOut, signIn, signUp, continueWithGitHub, reconnectGitHub }}>
       {children}
     </AuthContext.Provider>
   )
