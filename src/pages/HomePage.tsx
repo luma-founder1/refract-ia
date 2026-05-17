@@ -174,7 +174,7 @@ export const HomePage: React.FC<HomePageProps> = ({ onNavigate }) => {
 
       {/* ── What Refract does ─────────────── */}
       {!loading && !hasProjects && (
-        <div style={{ animation: 'fadeUp 0.4s ease 0.2s both' }}>
+        <div style={{ animation: 'fadeUp 0.4s ease 0.2s both', marginTop: 40 }}>
           <p className="section-label" style={{ marginBottom: 16 }}>
             What Refract does
           </p>

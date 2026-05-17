@@ -4,12 +4,14 @@ import { createClient } from '@supabase/supabase-js'
 const url  = import.meta.env.VITE_SUPABASE_URL  as string
 const key  = import.meta.env.VITE_SUPABASE_ANON_KEY as string
 
+const maskedUrl = url ? `${url.slice(0, 20)}...` : 'undefined'
+const hasKey = !!key
+console.log(`[supabase] Initializing — URL: ${maskedUrl}, key present: ${hasKey}`)
+
 if (!url || !key) {
-  console.error('Supabase keys missing!', { url, key })
+  console.error('[supabase] Keys missing!', { url, key })
   throw new Error('Missing VITE_SUPABASE_URL or VITE_SUPABASE_ANON_KEY in .env')
 }
-
-console.log('Supabase client initialized with:', url)
 
 export const supabase = createClient(url, key, {
   auth: {
@@ -17,6 +19,8 @@ export const supabase = createClient(url, key, {
     autoRefreshToken: true,
   },
 })
+
+console.log('[supabase] Client created successfully')
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
