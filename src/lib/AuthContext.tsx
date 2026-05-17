@@ -14,8 +14,6 @@ interface AuthContextValue {
   signIn: (email: string, password: string) => Promise<{ error: Error | null }>
   signUp: (email: string, password: string) => Promise<{ error: Error | null }>
   continueWithGitHub: () => Promise<{ error: Error | null }>
-  reconnectGitHub: () => Promise<{ error: Error | null }>
-  saveGitHubToken: (token: string) => Promise<boolean>
 }
 
 // ─── Context ──────────────────────────────────────────────────────────────────
@@ -29,8 +27,6 @@ const AuthContext = createContext<AuthContextValue>({
   signIn: async () => ({ error: null }),
   signUp: async () => ({ error: null }),
   continueWithGitHub: async () => ({ error: null }),
-  reconnectGitHub: async () => ({ error: null }),
-  saveGitHubToken: async () => false,
 })
 
 export const useAuth = () => useContext(AuthContext)
@@ -141,44 +137,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       return { error: err instanceof Error ? err : new Error('GitHub sign in failed') }
     }
   }, [])
-
-  const reconnectGitHub = useCallback(async () => {
-    try {
-      console.log('[auth] reconnectGitHub — signing out and re-authenticating')
-      await supabase.auth.signOut({ scope: 'local' })
-      setSession(null)
-      setProfile(null)
-      loadingDone.current = false
-      setLoading(true)
-      const { error } = await supabase.auth.signInWithOAuth({
-        provider: 'github',
-        options: { scopes: 'repo read:user', redirectTo: window.location.origin },
-      })
-      return { error: error ?? null }
-    } catch (err) {
-      return { error: err instanceof Error ? err : new Error('GitHub reconnect failed') }
-    }
-  }, [])
-
-  const saveGitHubToken = useCallback(async (token: string): Promise<boolean> => {
-    try {
-      if (!session?.user?.id) return false
-      const { error } = await supabase
-        .from('users')
-        .update({ github_token: token })
-        .eq('id', session.user.id)
-      if (error) {
-        console.error('[auth] saveGitHubToken — error:', error.message)
-        return false
-      }
-      console.log('[auth] saveGitHubToken — success')
-      setProfile(prev => prev ? { ...prev, github_token: token } : prev)
-      return true
-    } catch (e) {
-      console.error('[auth] saveGitHubToken — threw:', e)
-      return false
-    }
-  }, [session])
 
   // Highlight identify
   useEffect(() => {
@@ -297,7 +255,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   }, [fetchProfile])
 
   return (
-    <AuthContext.Provider value={{ session, profile, loading, refreshProfile, signOut, signIn, signUp, continueWithGitHub, reconnectGitHub, saveGitHubToken }}>
+    <AuthContext.Provider value={{ session, profile, loading, refreshProfile, signOut, signIn, signUp, continueWithGitHub }}>
       {children}
     </AuthContext.Provider>
   )

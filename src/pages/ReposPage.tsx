@@ -37,7 +37,7 @@ interface BranchModalState {
 }
 
 export const ReposPage: React.FC<{ onNavigate: (page: string, params?: any) => void }> = ({ onNavigate }) => {
-  const { profile, continueWithGitHub, reconnectGitHub } = useAuth()
+  const { profile, continueWithGitHub } = useAuth()
   const { setFileMap } = useFiles()
   const [repos, setRepos] = useState<GitHubRepo[]>([])
   const [loading, setLoading] = useState(false)
@@ -103,17 +103,9 @@ export const ReposPage: React.FC<{ onNavigate: (page: string, params?: any) => v
   const handleConnectGitHub = async () => {
     setError(null)
     setConnectingGitHub(true)
-
-    try {
-      const { error: oauthError } = profile?.id
-        ? await reconnectGitHub()
-        : await continueWithGitHub()
-      if (oauthError) {
-        setError(oauthError.message || 'Failed to continue with GitHub.')
-        setConnectingGitHub(false)
-      }
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to continue with GitHub.')
+    const { error: oauthError } = await continueWithGitHub()
+    if (oauthError) {
+      setError(oauthError.message || 'Failed to connect GitHub.')
       setConnectingGitHub(false)
     }
   }
@@ -255,12 +247,6 @@ export const ReposPage: React.FC<{ onNavigate: (page: string, params?: any) => v
             </div>
           </div>
 
-          {profile?.id && (
-            <p style={{ fontSize: 13, color: 'var(--ink-muted)', lineHeight: 1.5, padding: '8px 12px', background: 'var(--canvas-soft)', borderRadius: '6px' }}>
-              You're logged in as <strong>{profile.email}</strong>. Clicking below will redirect to GitHub to authorize access.
-            </p>
-          )}
-
           <button
             onClick={handleConnectGitHub}
             disabled={connectingGitHub}
@@ -268,7 +254,7 @@ export const ReposPage: React.FC<{ onNavigate: (page: string, params?: any) => v
             style={{ alignSelf: 'flex-start', gap: 8 }}
           >
             {connectingGitHub ? <Loader2 size={16} className="spin" /> : <Github size={16} />}
-            {connectingGitHub ? 'Connecting...' : profile?.id ? 'Reconnect GitHub' : 'Connect GitHub'}
+            {connectingGitHub ? 'Connecting...' : 'Connect GitHub'}
           </button>
         </div>
       ) : (
