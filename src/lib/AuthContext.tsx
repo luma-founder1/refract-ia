@@ -28,6 +28,7 @@ const AuthContext = createContext<AuthContextValue>({
   signOut: async () => {},
   signIn: async () => ({ error: null }),
   signUp: async () => ({ error: null }),
+  continueWithGitHub: async () => ({ error: null }),
   reconnectGitHub: async () => ({ error: null }),
   saveGitHubToken: async () => false,
 })
