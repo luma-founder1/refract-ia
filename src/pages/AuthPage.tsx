@@ -1,7 +1,7 @@
 import React, { useState } from 'react'
 import { LogoMark } from '../components/Logo'
 import { useAuth } from '../lib/AuthContext'
-import { Github, Loader2 } from 'lucide-react'
+import { Loader2 } from 'lucide-react'
 
 export const AuthPage: React.FC = () => {
   const [mode, setMode] = useState<'signin' | 'signup'>('signin')
@@ -9,9 +9,8 @@ export const AuthPage: React.FC = () => {
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
-  const [githubLoading, setGithubLoading] = useState(false)
 
-  const { signIn, signUp, continueWithGitHub } = useAuth()
+  const { signIn, signUp } = useAuth()
 
   const handleSignIn = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -72,27 +71,6 @@ export const AuthPage: React.FC = () => {
       setError('An unexpected error occurred')
     } finally {
       setLoading(false)
-    }
-  }
-
-  const handleGitHub = async () => {
-    setError('')
-    setGithubLoading(true)
-
-    try {
-      if (mode === 'signup') {
-        sessionStorage.setItem('justSignedUp', 'true')
-      } else {
-        sessionStorage.removeItem('justSignedUp')
-      }
-      const { error: err } = await continueWithGitHub()
-      if (err) {
-        setError(err.message || 'Failed to sign up with GitHub')
-        setGithubLoading(false)
-      }
-    } catch (err) {
-      setError('An unexpected error occurred')
-      setGithubLoading(false)
     }
   }
 
@@ -216,7 +194,7 @@ export const AuthPage: React.FC = () => {
               placeholder="you@example.com"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              disabled={loading || githubLoading}
+              disabled={loading}
               style={{ height: 40 }}
             />
           </div>
@@ -240,7 +218,7 @@ export const AuthPage: React.FC = () => {
               placeholder="••••••••"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              disabled={loading || githubLoading}
+              disabled={loading}
               style={{ height: 40 }}
             />
           </div>
@@ -264,7 +242,7 @@ export const AuthPage: React.FC = () => {
           {/* Submit button */}
           <button
             type="submit"
-            disabled={loading || githubLoading}
+            disabled={loading}
             className="btn btn-primary"
             style={{
               height: 40,
@@ -285,37 +263,6 @@ export const AuthPage: React.FC = () => {
             )}
           </button>
         </form>
-
-        {/* GitHub button */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12, margin: '24px 0', opacity: 0.5 }}>
-          <div style={{ flex: 1, height: 1, background: 'var(--border)' }} />
-          <span style={{ fontSize: 12, color: 'var(--muted-foreground)' }}>or</span>
-          <div style={{ flex: 1, height: 1, background: 'var(--border)' }} />
-        </div>
-
-        <button
-          onClick={handleGitHub}
-          disabled={loading || githubLoading}
-          type="button"
-          className="btn btn-secondary"
-          style={{
-            height: 40,
-            width: '100%',
-            justifyContent: 'center',
-          }}
-        >
-          {githubLoading ? (
-            <>
-              <Loader2 size={16} className="animate-spin" />
-              {mode === 'signin' ? 'Signing in...' : 'Signing up...'}
-            </>
-          ) : (
-            <>
-              <Github size={16} />
-              Continue with GitHub
-            </>
-          )}
-        </button>
       </div>
     </div>
   )
