@@ -104,8 +104,18 @@ export const OnboardingPage: React.FC<OnboardingPageProps> = ({ onComplete }) =>
     }}>
       <style>{`
         @keyframes slideIn { 
-          from { opacity: 0; transform: translateY(10px) scale(0.99); } 
-          to { opacity: 1; transform: translateY(0) scale(1); } 
+          from { transform: translateX(16px); opacity: 0; }
+          to { transform: translateX(0); opacity: 1; }
+        }
+        @keyframes fadeOut {
+          from { opacity: 1; }
+          to { opacity: 0; }
+        }
+        .step-enter {
+          animation: slideIn 0.35s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+        }
+        .step-exit {
+          animation: fadeOut 0.2s cubic-bezier(0.16, 1, 0.3, 1) forwards;
         }
         @keyframes fadeOut {
           from { opacity: 1; transform: translateY(0) scale(1); }

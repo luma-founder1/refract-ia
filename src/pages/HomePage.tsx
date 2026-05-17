@@ -70,11 +70,12 @@ export const HomePage: React.FC<HomePageProps> = ({ onNavigate }) => {
   return (
     <div style={{ padding: '80px 40px', height: '100%', overflowY: 'auto', boxSizing: 'border-box', background: 'var(--canvas)' }}>
       <style>{`
-        @keyframes fadeUp { from { opacity: 0; transform: translateY(12px) } to { opacity: 1; transform: translateY(0) } }
+        @keyframes fadeUp { from { opacity: 0; transform: translateY(16px) } to { opacity: 1; transform: translateY(0) } }
+        @keyframes fadeIn { from { opacity: 0 } to { opacity: 1 } }
       `}</style>
 
        {/* Hero Section */}
-       <div style={{ marginBottom: 80, animation: 'fadeUp 0.4s ease', maxWidth: 800 }}>
+       <div style={{ marginBottom: 80, animation: 'fadeUp 0.5s cubic-bezier(0.16, 1, 0.3, 1) both', maxWidth: 800 }}>
          {error && (
            <div style={{ 
              background: 'rgba(207, 45, 86, 0.08)', 
@@ -111,7 +112,7 @@ export const HomePage: React.FC<HomePageProps> = ({ onNavigate }) => {
 
         {/* ── Quick actions — only appears if no projects ─────────────────── */}
         {!loading && !hasProjects && (
-          <div style={{ animation: 'fadeUp 0.4s ease 0.1s both' }}>
+          <div style={{ animation: 'fadeUp 0.5s cubic-bezier(0.16, 1, 0.3, 1) 0.08s both' }}>
             <button onClick={() => setShowModal(true)} className="btn btn-primary">
               <Plus size={16} /> Add your first project
             </button>
@@ -120,7 +121,7 @@ export const HomePage: React.FC<HomePageProps> = ({ onNavigate }) => {
       </div>
 
       {/* ── Recent Projects ───────────────────────────────────────────────────── */}
-      <div style={{ animation: 'fadeUp 0.4s ease 0.15s both', marginBottom: 80 }}>
+      <div style={{ animation: 'fadeUp 0.5s cubic-bezier(0.16, 1, 0.3, 1) 0.12s both', marginBottom: 80 }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 24 }}>
           <h2 style={{ fontSize: '26px', fontWeight: 400, letterSpacing: '-0.325px', color: 'var(--ink)', lineHeight: 1.25, fontFamily: 'var(--font-sans)' }}>Recent Projects</h2>
           {hasProjects && (
@@ -142,13 +143,13 @@ export const HomePage: React.FC<HomePageProps> = ({ onNavigate }) => {
               </div>
             ))
           ) : (
-             <>
-               {projects.slice(0, 5).map((p: Project) => (
-                 <div
-                   key={p.id}
-                   onClick={() => onNavigate('project-view', { projectId: p.id })}
-                   className="card"
-                   style={{ cursor: 'pointer', display: 'flex', flexDirection: 'column', minHeight: 110, padding: '16px 20px' }}
+              <>
+                {projects.slice(0, 5).map((p: Project, idx: number) => (
+                  <div
+                    key={p.id}
+                    onClick={() => onNavigate('project-view', { projectId: p.id })}
+                    className="card"
+                    style={{ cursor: 'pointer', display: 'flex', flexDirection: 'column', minHeight: 110, padding: '16px 20px', animation: `fadeUp 0.4s cubic-bezier(0.16, 1, 0.3, 1) ${0.18 + idx * 0.04}s both` }}
                  >
                    <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 10 }}>
                      <span style={{ fontSize: '16px', fontWeight: 600, letterSpacing: 0, color: 'var(--ink)' }}>{p.name}</span>
@@ -174,7 +175,7 @@ export const HomePage: React.FC<HomePageProps> = ({ onNavigate }) => {
 
       {/* ── What Refract does ─────────────── */}
       {!loading && !hasProjects && (
-        <div style={{ animation: 'fadeUp 0.4s ease 0.2s both', marginTop: 40 }}>
+        <div style={{ animation: 'fadeUp 0.5s cubic-bezier(0.16, 1, 0.3, 1) 0.16s both', marginTop: 40 }}>
           <p className="section-label" style={{ marginBottom: 16 }}>
             What Refract does
           </p>

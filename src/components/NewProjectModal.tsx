@@ -238,9 +238,11 @@ export const NewProjectModal: React.FC<Props> = ({ onClose, onProjectCreated, on
     <>
       <style>{`
         @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
-        .spin { animation: spin 1.5s cubic-bezier(0.4, 0, 0.2, 1) infinite; }
+        .spin { animation: spin 1s cubic-bezier(0.4, 0, 0.2, 1) infinite; }
         @keyframes pulse { 0% { opacity: 0.3 } 50% { opacity: 0.6 } 100% { opacity: 0.3 } }
         .skeleton { background: var(--surface-strong); border-radius: 8px; animation: pulse 1.5s infinite ease-in-out; }
+        @keyframes fadeUp { from { opacity: 0; transform: translateY(12px) } to { opacity: 1; transform: translateY(0) } }
+        @keyframes modalIn { from { opacity: 0; transform: scale(0.96) translateY(8px) } to { opacity: 1; transform: scale(1) translateY(0) } }
       `}</style>
 
       <div
@@ -268,6 +270,7 @@ export const NewProjectModal: React.FC<Props> = ({ onClose, onProjectCreated, on
             maxWidth: 560,
             padding: 32,
             position: 'relative',
+            animation: 'modalIn 0.35s cubic-bezier(0.16, 1, 0.3, 1) both',
           }}
         >
           <button
@@ -420,6 +423,7 @@ export const NewProjectModal: React.FC<Props> = ({ onClose, onProjectCreated, on
                           alignItems: 'flex-start',
                           justifyContent: 'space-between',
                           gap: 16,
+                          animation: `fadeUp 0.3s cubic-bezier(0.16, 1, 0.3, 1) ${index * 0.03}s both`,
                         }}
                       >
                         <div style={{ minWidth: 0, flex: 1 }}>

@@ -128,9 +128,9 @@ const MonitorPanel: React.FC<{
       position: 'fixed', top: 0, right: 0, bottom: 0, width: 380,
       background: 'var(--canvas)', borderLeft: '1px solid var(--hairline)',
       display: 'flex', flexDirection: 'column', zIndex: 100,
-      animation: 'slideIn 0.3s cubic-bezier(0.16, 1, 0.3, 1)',
+      animation: 'slideIn 0.35s cubic-bezier(0.16, 1, 0.3, 1)',
     }}>
-      <style>{`@keyframes slideIn { from { transform: translateX(20px); opacity: 0 } to { transform: translateX(0); opacity: 1 } }`}</style>
+      <style>{`@keyframes slideIn { from { transform: translateX(24px); opacity: 0 } to { transform: translateX(0); opacity: 1 } }`}</style>
 
       {/* Header */}
       <div style={{ padding: '20px 24px', borderBottom: `1px solid var(--hairline)`, display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexShrink: 0 }}>
@@ -451,7 +451,7 @@ export const ProjectsPage: React.FC<ProjectsPageProps> = ({ onOpenProject, onNav
 
   return (
     <div style={{ padding: '32px 36px', height: '100%', overflowY: 'auto', boxSizing: 'border-box', background: 'var(--canvas)' }}>
-      <style>{`@keyframes spin { to { transform: rotate(360deg) } } .spin { animation: spin 1s linear infinite; }`}</style>
+      <style>{`@keyframes spin { to { transform: rotate(360deg) } } .spin { animation: spin 1s cubic-bezier(0.4, 0, 0.2, 1) infinite; }`}</style>
 
        {error && (
          <div style={{ 
