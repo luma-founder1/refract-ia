@@ -1,50 +1,78 @@
-import { createClient, type User } from '@supabase/supabase-js'
+import { createClient } from '@supabase/supabase-js'
+import * as jwt from 'jsonwebtoken'
 
-type PlanName = 'free' | 'pro' | 'team' | 'enterprise'
+const supabase = createClient(
+  process.env.VITE_SUPABASE_URL!,
+  process.env.SUPABASE_SERVICE_ROLE_KEY!
+)
 
-const supabaseUrl = process.env.VITE_SUPABASE_URL || ''
-const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY || ''
+// ─── Gerar JWT para autenticar como GitHub App ────────────────────────────────
 
-export interface AuthenticatedUserContext {
-  user: User
-  plan: PlanName
-  githubToken: string | null
+function generateAppJWT(): string {
+  const privateKey = process.env.GITHUB_APP_PRIVATE_KEY!.replace(/\\n/g, '\n')
+  const appId = process.env.GITHUB_APP_ID!
+
+  return jwt.sign(
+    { iat: Math.floor(Date.now() / 1000) - 60, exp: Math.floor(Date.now() / 1000) + 540, iss: appId },
+    privateKey,
+    { algorithm: 'RS256' }
+  )
 }
 
-function getServerSupabase() {
-  if (!supabaseUrl || !serviceRoleKey) {
-    throw new Error('Supabase server credentials are not configured')
+// ─── Gerar Installation Access Token ─────────────────────────────────────────
+
+export async function getInstallationToken(installationId: number): Promise<string> {
+  const appJWT = generateAppJWT()
+
+  const res = await fetch(
+    `https://api.github.com/app/installations/${installationId}/access_tokens`,
+    {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${appJWT}`,
+        Accept: 'application/vnd.github+json',
+        'X-GitHub-Api-Version': '2022-11-28',
+      },
+    }
+  )
+
+  if (!res.ok) {
+    const err = await res.text()
+    throw new Error(`Failed to get installation token: ${err}`)
   }
 
-  return createClient(supabaseUrl, serviceRoleKey)
+  const data = await res.json()
+  return data.token
 }
 
-export async function getAuthenticatedUser(authHeader: string | undefined): Promise<AuthenticatedUserContext> {
+// ─── Autenticar utilizador via Supabase session ───────────────────────────────
+
+export async function getAuthenticatedUser(authHeader: string | undefined) {
   if (!authHeader?.startsWith('Bearer ')) {
-    throw new Error('Missing authorization')
+    throw new Error('Missing authorization header')
   }
 
-  const token = authHeader.replace('Bearer ', '')
-  const supabase = getServerSupabase()
+  const accessToken = authHeader.replace('Bearer ', '')
+  const { data: { user }, error } = await supabase.auth.getUser(accessToken)
 
-  const { data: { user }, error } = await supabase.auth.getUser(token)
-  if (error || !user) {
-    throw new Error('Invalid token')
-  }
+  if (error || !user) throw new Error('Invalid session')
 
-  const { data: profile, error: profileError } = await supabase
+  const { data: profile } = await supabase
     .from('users')
-    .select('plan, github_token')
+    .select('plan, github_installation_id')
     .eq('id', user.id)
     .single()
 
-  if (profileError) {
-    throw new Error('Unable to load user profile')
+  if (!profile?.github_installation_id) {
+    throw new Error('GitHub App not installed')
   }
+
+  const installationToken = await getInstallationToken(profile.github_installation_id)
 
   return {
     user,
-    plan: (profile?.plan as PlanName | undefined) ?? 'free',
-    githubToken: profile?.github_token ?? null,
+    plan: profile.plan ?? 'free',
+    githubToken: installationToken,
+    installationId: profile.github_installation_id,
   }
 }

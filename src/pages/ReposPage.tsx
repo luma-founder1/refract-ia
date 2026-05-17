@@ -43,6 +43,7 @@ export const ReposPage: React.FC<{ onNavigate: (page: string, params?: any) => v
   const [loading, setLoading] = useState(false)
   const [search, setSearch] = useState('')
   const [error, setError] = useState<string | null>(null)
+  const [appNotInstalled, setAppNotInstalled] = useState(false)
   const [loadingBranchesFor, setLoadingBranchesFor] = useState<number | null>(null)
   const [cloningRepoId, setCloningRepoId] = useState<number | null>(null)
   const [branchModal, setBranchModal] = useState<BranchModalState | null>(null)
@@ -53,6 +54,7 @@ export const ReposPage: React.FC<{ onNavigate: (page: string, params?: any) => v
     if (!hasGitHubConnection) {
       setRepos([])
       setLoading(false)
+      setAppNotInstalled(false)
       return
     }
 
@@ -61,18 +63,20 @@ export const ReposPage: React.FC<{ onNavigate: (page: string, params?: any) => v
     const loadRepos = async () => {
       setLoading(true)
       setError(null)
+      setAppNotInstalled(false)
 
       try {
         const nextRepos = await getGitHubRepos()
         if (!cancelled) setRepos(nextRepos)
       } catch (err) {
         if (cancelled) return
-        if (err instanceof RateLimitError) {
-          setError(err.message)
-        } else if (err instanceof Error) {
+        const msg = err instanceof Error ? err.message : ''
+        if (msg.includes('GitHub App not installed') || msg.includes('403')) {
+          setAppNotInstalled(true)
+        } else if (err instanceof RateLimitError) {
           setError(err.message)
         } else {
-          setError('Failed to load GitHub repositories.')
+          setError(err instanceof Error ? err.message : 'Failed to load GitHub repositories.')
         }
       } finally {
         if (!cancelled) setLoading(false)
@@ -218,7 +222,7 @@ export const ReposPage: React.FC<{ onNavigate: (page: string, params?: any) => v
         </div>
       )}
 
-      {!hasGitHubConnection ? (
+      {!hasGitHubConnection || appNotInstalled ? (
         <div
           className="card"
           style={{
@@ -234,9 +238,13 @@ export const ReposPage: React.FC<{ onNavigate: (page: string, params?: any) => v
               <GitHubIcon size={22} />
             </div>
             <div>
-              <p style={{ fontSize: 18, fontWeight: 600, color: 'var(--ink)', marginBottom: 4 }}>Connect GitHub</p>
+              <p style={{ fontSize: 18, fontWeight: 600, color: 'var(--ink)', marginBottom: 4 }}>
+                {appNotInstalled ? 'GitHub App Not Installed' : 'Connect GitHub'}
+              </p>
               <p style={{ fontSize: 14, color: 'var(--ink-muted)', lineHeight: 1.5 }}>
-                Connect your GitHub account to list repositories, pick a branch, and clone projects straight into the analysis flow.
+                {appNotInstalled
+                  ? 'Install the Refract GitHub App to access your repositories. You only need to do this once.'
+                  : 'Install the Refract GitHub App to list repositories, pick a branch, and clone projects straight into the analysis flow.'}
               </p>
             </div>
           </div>
@@ -247,7 +255,7 @@ export const ReposPage: React.FC<{ onNavigate: (page: string, params?: any) => v
             style={{ alignSelf: 'flex-start', gap: 8 }}
           >
             <Github size={16} />
-            Install GitHub App
+            {appNotInstalled ? 'Install GitHub App' : 'Install GitHub App'}
           </button>
         </div>
       ) : (
