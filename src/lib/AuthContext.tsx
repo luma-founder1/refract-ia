@@ -114,8 +114,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   }, [])
 
   // Redireciona para instalação da GitHub App
+  // Passa o user_id no ?state= para o callback conseguir identificar o utilizador
   const installGitHubApp = useCallback(() => {
-    window.location.href = 'https://github.com/apps/refract/installations/new'
+    const userId = sessionRef.current?.user?.id
+    if (!userId) return
+    const url = `https://github.com/apps/refract/installations/new?state=${userId}`
+    window.location.href = url
   }, [])
 
   // Highlight identify
