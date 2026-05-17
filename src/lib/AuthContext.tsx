@@ -194,22 +194,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     console.log('[auth] INIT — loading: true, session: null, profile: null')
     let initialSessionHandled = false
 
-    const trySaveGitHubToken = async (userId: string, token: string | undefined, source: string) => {
-      if (!token) return false
-      console.log(`[auth] GitHub token detected via ${source}, saving to profile...`)
-      const { error } = await supabase
-        .from('users')
-        .update({ github_token: token })
-        .eq('id', userId)
-      if (error) {
-        console.error('[auth] Failed to save GitHub token:', error.message)
-        return false
-      }
-      console.log('[auth] GitHub token saved successfully')
-      setProfile(prev => prev ? { ...prev, github_token: token } : prev)
-      return true
-    }
-
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, s) => {
       console.log(`[auth] onAuthStateChange — event: ${event}, hasSession: ${!!s}, userId: ${s?.user?.id?.slice(0,8) ?? 'null'}`)
       setSession(s)
@@ -225,40 +209,21 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
 
       if (s?.user?.id) {
-        // Check multiple sources for GitHub provider token
-        const sessionToken = (s as any).provider_token || (s as any).provider_access_token
-        const userMetaToken = s.user.app_metadata?.provider_token
-
-        if (sessionToken) {
-          await trySaveGitHubToken(s.user.id, sessionToken, 'session.provider_token')
-        } else if (userMetaToken) {
-          await trySaveGitHubToken(s.user.id, userMetaToken, 'user.app_metadata.provider_token')
-        } else if (event === 'SIGNED_IN') {
-          // Check URL hash for provider_token (fallback for OAuth callback)
-          const hash = window.location.hash
-          if (hash.includes('provider_token=')) {
-            const params = new URLSearchParams(hash.replace('#', '&'))
-            const hashToken = params.get('provider_token')
-            if (hashToken) {
-              await trySaveGitHubToken(s.user.id, hashToken, 'URL hash')
-              // Clean URL
-              window.history.replaceState({}, '', window.location.pathname)
-            }
-          }
-        }
-
-        // Check if user already has github_token in profile
-        if (event === 'INITIAL_SESSION' || event === 'SIGNED_IN') {
-          const { data: existingProfile } = await supabase
+        const providerToken = (s as any).provider_token || (s as any).provider_access_token
+        console.log(`[auth] OAuth callback — hasProviderToken: ${!!providerToken}, event: ${event}`)
+        if (providerToken) {
+          console.log('[auth] Saving GitHub token to profile...')
+          const { error: saveError } = await supabase
             .from('users')
-            .select('github_token')
+            .update({ github_token: providerToken })
             .eq('id', s.user.id)
-            .single()
-          if (existingProfile?.github_token) {
-            console.log('[auth] GitHub token already exists in profile')
-          } else if (!sessionToken && !userMetaToken) {
-            console.warn('[auth] No GitHub token found — user needs to connect GitHub')
+          if (saveError) {
+            console.error('[auth] Failed to save GitHub token:', saveError.message)
+          } else {
+            console.log('[auth] GitHub token saved successfully')
           }
+        } else if (event === 'SIGNED_IN' || event === 'INITIAL_SESSION') {
+          console.warn('[auth] No provider_token in session — GitHub token may not be saved')
         }
 
         // Tentar buscar perfil

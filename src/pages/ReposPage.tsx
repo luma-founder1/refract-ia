@@ -37,17 +37,16 @@ interface BranchModalState {
 }
 
 export const ReposPage: React.FC<{ onNavigate: (page: string, params?: any) => void }> = ({ onNavigate }) => {
-  const { profile, refreshProfile } = useAuth()
+  const { profile, continueWithGitHub, reconnectGitHub } = useAuth()
   const { setFileMap } = useFiles()
   const [repos, setRepos] = useState<GitHubRepo[]>([])
   const [loading, setLoading] = useState(false)
   const [search, setSearch] = useState('')
   const [error, setError] = useState<string | null>(null)
+  const [connectingGitHub, setConnectingGitHub] = useState(false)
   const [loadingBranchesFor, setLoadingBranchesFor] = useState<number | null>(null)
   const [cloningRepoId, setCloningRepoId] = useState<number | null>(null)
   const [branchModal, setBranchModal] = useState<BranchModalState | null>(null)
-  const [manualToken, setManualToken] = useState('')
-  const [savingToken, setSavingToken] = useState(false)
 
   const hasGitHubConnection = Boolean(profile?.github_token)
 
@@ -101,30 +100,21 @@ export const ReposPage: React.FC<{ onNavigate: (page: string, params?: any) => v
     })
   }, [repos, search])
 
-  const handleSaveToken = async () => {
-    if (!manualToken.startsWith('ghp_') && !manualToken.startsWith('github_pat_')) {
-      setError('Token must start with ghp_ or github_pat_')
-      return
-    }
-    if (!profile?.id) {
-      setError('You must be logged in first.')
-      return
-    }
+  const handleConnectGitHub = async () => {
     setError(null)
-    setSavingToken(true)
+    setConnectingGitHub(true)
 
-    const { supabase } = await import('../lib/supabase')
-    const { error: saveError } = await supabase
-      .from('users')
-      .update({ github_token: manualToken })
-      .eq('id', profile.id)
-    setSavingToken(false)
-
-    if (saveError) {
-      setError(`Failed to save token: ${saveError.message}`)
-    } else {
-      setManualToken('')
-      await refreshProfile()
+    try {
+      const { error: oauthError } = profile?.id
+        ? await reconnectGitHub()
+        : await continueWithGitHub()
+      if (oauthError) {
+        setError(oauthError.message || 'Failed to continue with GitHub.')
+        setConnectingGitHub(false)
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to continue with GitHub.')
+      setConnectingGitHub(false)
     }
   }
 
@@ -218,7 +208,7 @@ export const ReposPage: React.FC<{ onNavigate: (page: string, params?: any) => v
         <div>
           <h1 className="page-title" style={{ fontSize: '26px', fontWeight: 400, letterSpacing: '-0.325px', marginBottom: 6 }}>Repositories</h1>
           <p style={{ fontSize: 14, color: 'var(--ink-muted)' }}>
-            Connect your GitHub account with a Personal Access Token to list and clone repositories.
+            Browse your GitHub repositories and clone one directly into Refract for analysis.
           </p>
         </div>
       </div>
@@ -250,53 +240,36 @@ export const ReposPage: React.FC<{ onNavigate: (page: string, params?: any) => v
             padding: 28,
             display: 'flex',
             flexDirection: 'column',
-            gap: 20,
+            gap: 16,
           }}
         >
-          <div style={{ display: 'flex', alignItems: 'flex-start', gap: 14 }}>
-            <div style={{ width: 48, height: 48, borderRadius: '10px', background: 'var(--canvas-soft)', display: 'grid', placeItems: 'center' }}>
-              <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
-                <path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0 0 24 12c0-6.63-5.37-12-12-12z" />
-              </svg>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            <div style={{ width: 44, height: 44, borderRadius: '8px', background: 'var(--canvas-soft)', display: 'grid', placeItems: 'center' }}>
+              <GitHubIcon size={22} />
             </div>
             <div>
-              <p style={{ fontSize: 18, fontWeight: 600, color: 'var(--ink)', marginBottom: 6 }}>Connect GitHub</p>
-              <p style={{ fontSize: 14, color: 'var(--ink-muted)', lineHeight: 1.6 }}>
-                Paste a GitHub Personal Access Token to connect your account. You can create one at{' '}
-                <a href="https://github.com/settings/tokens" target="_blank" rel="noreferrer" style={{ color: 'var(--primary)', textDecoration: 'underline' }}>
-                  github.com/settings/tokens
-                </a>
-                {' '}with the <strong>repo</strong> and <strong>read:user</strong> scopes.
+              <p style={{ fontSize: 18, fontWeight: 600, color: 'var(--ink)', marginBottom: 4 }}>Connect GitHub</p>
+              <p style={{ fontSize: 14, color: 'var(--ink-muted)', lineHeight: 1.5 }}>
+                Connect your GitHub account to list repositories, pick a branch, and clone projects straight into the analysis flow.
               </p>
             </div>
           </div>
 
-          <div style={{ display: 'flex', gap: 12 }}>
-            <input
-              className="input"
-              style={{ flex: 1, fontFamily: 'var(--font-mono)', fontSize: 14, padding: '10px 14px', height: 44 }}
-              placeholder="ghp_xxxxxxxxxxxxxxxxxxxx..."
-              value={manualToken}
-              onChange={(e) => setManualToken(e.target.value.trim())}
-              onKeyDown={(e) => { if (e.key === 'Enter') handleSaveToken() }}
-            />
-            <button
-              onClick={handleSaveToken}
-              disabled={savingToken || !manualToken}
-              className="btn btn-primary"
-              style={{ minWidth: 140 }}
-            >
-              {savingToken ? <Loader2 size={16} className="spin" /> : <>
-                <Github size={16} /> Save & Load
-              </>}
-            </button>
-          </div>
-
-          {profile?.email && (
-            <p style={{ fontSize: 12, color: 'var(--ink-muted-soft)' }}>
-              Token will be stored securely in your user profile for <strong>{profile.email}</strong>.
+          {profile?.id && (
+            <p style={{ fontSize: 13, color: 'var(--ink-muted)', lineHeight: 1.5, padding: '8px 12px', background: 'var(--canvas-soft)', borderRadius: '6px' }}>
+              You're logged in as <strong>{profile.email}</strong>. Clicking below will redirect to GitHub to authorize access.
             </p>
           )}
+
+          <button
+            onClick={handleConnectGitHub}
+            disabled={connectingGitHub}
+            className="btn btn-primary"
+            style={{ alignSelf: 'flex-start', gap: 8 }}
+          >
+            {connectingGitHub ? <Loader2 size={16} className="spin" /> : <Github size={16} />}
+            {connectingGitHub ? 'Connecting...' : profile?.id ? 'Reconnect GitHub' : 'Connect GitHub'}
+          </button>
         </div>
       ) : (
         <>
@@ -340,7 +313,7 @@ export const ReposPage: React.FC<{ onNavigate: (page: string, params?: any) => v
               <div style={{ padding: '44px 24px', textAlign: 'center' }}>
                 <p style={{ fontSize: 16, color: 'var(--ink)', marginBottom: 6 }}>No repositories found.</p>
                 <p style={{ fontSize: 14, color: 'var(--ink-muted)' }}>
-                  Try another search term or update your GitHub token if the list looks incomplete.
+                  Try another search term or reconnect GitHub if the list looks incomplete.
                 </p>
               </div>
             ) : (

@@ -42,20 +42,19 @@ function getInlineError(error: unknown, fallback: string): string {
 }
 
 export const NewProjectModal: React.FC<Props> = ({ onClose, onProjectCreated, onNavigate }) => {
-  const { profile, refreshProfile } = useAuth()
+  const { profile, continueWithGitHub, reconnectGitHub } = useAuth()
   const { setFileMap } = useFiles()
 
   const [repos, setRepos] = useState<GitHubRepo[]>([])
   const [search, setSearch] = useState('')
   const [error, setError] = useState<string | null>(null)
+  const [connectingGitHub, setConnectingGitHub] = useState(false)
   const [loadingRepos, setLoadingRepos] = useState(false)
   const [loadingBranches, setLoadingBranches] = useState(false)
   const [importing, setImporting] = useState(false)
   const [selectedRepo, setSelectedRepo] = useState<GitHubRepo | null>(null)
   const [branches, setBranches] = useState<GitHubBranch[]>([])
   const [selectedBranch, setSelectedBranch] = useState('')
-  const [manualToken, setManualToken] = useState('')
-  const [savingToken, setSavingToken] = useState(false)
 
   void onNavigate
 
@@ -145,30 +144,21 @@ export const NewProjectModal: React.FC<Props> = ({ onClose, onProjectCreated, on
     )
   }, [repos, search])
 
-  const handleSaveToken = async () => {
-    if (!manualToken.startsWith('ghp_') && !manualToken.startsWith('github_pat_')) {
-      setError('Token must start with ghp_ or github_pat_')
-      return
-    }
-    if (!profile?.id) {
-      setError('You must be logged in first.')
-      return
-    }
+  const handleConnectGitHub = async () => {
     setError(null)
-    setSavingToken(true)
+    setConnectingGitHub(true)
 
-    const { supabase } = await import('../lib/supabase')
-    const { error: saveError } = await supabase
-      .from('users')
-      .update({ github_token: manualToken })
-      .eq('id', profile.id)
-    setSavingToken(false)
-
-    if (saveError) {
-      setError(`Failed to save token: ${saveError.message}`)
-    } else {
-      setManualToken('')
-      await refreshProfile()
+    try {
+      const { error: oauthError } = profile?.id
+        ? await reconnectGitHub()
+        : await continueWithGitHub()
+      if (oauthError) {
+        setError(oauthError.message || 'Failed to continue with GitHub.')
+        setConnectingGitHub(false)
+      }
+    } catch (err) {
+      setError(getInlineError(err, 'Failed to continue with GitHub.'))
+      setConnectingGitHub(false)
     }
   }
 
@@ -242,7 +232,7 @@ export const NewProjectModal: React.FC<Props> = ({ onClose, onProjectCreated, on
     }
   }
 
-  const isBusy = savingToken || importing
+  const isBusy = connectingGitHub || importing
 
   return (
     <>
@@ -339,7 +329,7 @@ export const NewProjectModal: React.FC<Props> = ({ onClose, onProjectCreated, on
                 gap: 18,
               }}
             >
-              <div style={{ display: 'flex', alignItems: 'flex-start', gap: 14 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
                 <div
                   style={{
                     width: 48,
@@ -357,36 +347,21 @@ export const NewProjectModal: React.FC<Props> = ({ onClose, onProjectCreated, on
                   <p style={{ fontSize: 18, fontWeight: 600, color: 'var(--ink)', marginBottom: 4 }}>
                     Connect GitHub
                   </p>
-                  <p style={{ fontSize: 14, color: 'var(--ink-muted)', lineHeight: 1.6 }}>
-                    Paste a GitHub Personal Access Token (starts with <code style={{ fontFamily: 'var(--font-mono)', fontSize: 13, background: 'var(--canvas-soft)', padding: '2px 6px', borderRadius: 4 }}>ghp_...</code>). Create one at{' '}
-                    <a href="https://github.com/settings/tokens" target="_blank" rel="noreferrer" style={{ color: 'var(--primary)', textDecoration: 'underline' }}>
-                      github.com/settings/tokens
-                    </a>
-                    {' '}with <strong>repo</strong> and <strong>read:user</strong> scopes.
+                  <p style={{ fontSize: 14, color: 'var(--ink-muted)', lineHeight: 1.5 }}>
+                    Connect your GitHub account to import repositories.
                   </p>
                 </div>
               </div>
 
-              <div style={{ display: 'flex', gap: 12 }}>
-                <input
-                  className="input"
-                  style={{ flex: 1, fontFamily: 'var(--font-mono)', fontSize: 14, padding: '10px 14px', height: 44 }}
-                  placeholder="ghp_xxxxxxxxxxxxxxxxxxxx..."
-                  value={manualToken}
-                  onChange={(e) => setManualToken(e.target.value.trim())}
-                  onKeyDown={(e) => { if (e.key === 'Enter') handleSaveToken() }}
-                />
-                <button
-                  onClick={handleSaveToken}
-                  disabled={savingToken || !manualToken}
-                  className="btn btn-primary"
-                  style={{ minWidth: 130 }}
-                >
-                  {savingToken ? <Loader2 size={16} className="spin" /> : <>
-                    <Github size={16} /> Save & Load
-                  </>}
-                </button>
-              </div>
+              <button
+                onClick={handleConnectGitHub}
+                disabled={connectingGitHub}
+                className="btn btn-primary"
+                style={{ alignSelf: 'flex-start', gap: 8 }}
+              >
+                {connectingGitHub ? <Loader2 size={16} className="spin" /> : <Github size={16} />}
+                {connectingGitHub ? 'Connecting...' : 'Connect GitHub'}
+              </button>
             </div>
           )}
 
