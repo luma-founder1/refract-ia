@@ -118,7 +118,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const installGitHubApp = useCallback(() => {
     const userId = sessionRef.current?.user?.id
     if (!userId) return
-    const url = `https://github.com/apps/refract/installations/new?state=${userId}`
+    const url = `https://github.com/apps/refractdev/installations/new?state=${userId}`
     window.location.href = url
   }, [])
 
