@@ -37,18 +37,17 @@ interface BranchModalState {
 }
 
 export const ReposPage: React.FC<{ onNavigate: (page: string, params?: any) => void }> = ({ onNavigate }) => {
-  const { profile, continueWithGitHub, reconnectGitHub } = useAuth()
+  const { profile, installGitHubApp } = useAuth()
   const { setFileMap } = useFiles()
   const [repos, setRepos] = useState<GitHubRepo[]>([])
   const [loading, setLoading] = useState(false)
   const [search, setSearch] = useState('')
   const [error, setError] = useState<string | null>(null)
-  const [connectingGitHub, setConnectingGitHub] = useState(false)
   const [loadingBranchesFor, setLoadingBranchesFor] = useState<number | null>(null)
   const [cloningRepoId, setCloningRepoId] = useState<number | null>(null)
   const [branchModal, setBranchModal] = useState<BranchModalState | null>(null)
 
-  const hasGitHubConnection = Boolean(profile?.github_token)
+  const hasGitHubConnection = Boolean(profile?.github_installation_id || profile?.github_token)
 
   useEffect(() => {
     if (!hasGitHubConnection) {
@@ -100,17 +99,9 @@ export const ReposPage: React.FC<{ onNavigate: (page: string, params?: any) => v
     })
   }, [repos, search])
 
-  const handleConnectGitHub = async () => {
+  const handleConnectGitHub = () => {
     setError(null)
-    setConnectingGitHub(true)
-    // If user already has a session, reconnect (sign out + fresh OAuth) to capture provider_token
-    const { error: oauthError } = profile?.id
-      ? await reconnectGitHub()
-      : await continueWithGitHub()
-    if (oauthError) {
-      setError(oauthError.message || 'Failed to connect GitHub.')
-      setConnectingGitHub(false)
-    }
+    installGitHubApp()
   }
 
   const handleOpenBranchModal = async (repo: GitHubRepo) => {
@@ -252,12 +243,11 @@ export const ReposPage: React.FC<{ onNavigate: (page: string, params?: any) => v
 
           <button
             onClick={handleConnectGitHub}
-            disabled={connectingGitHub}
             className="btn btn-primary"
             style={{ alignSelf: 'flex-start', gap: 8 }}
           >
-            {connectingGitHub ? <Loader2 size={16} className="spin" /> : <Github size={16} />}
-            {connectingGitHub ? 'Connecting...' : 'Connect GitHub'}
+            <Github size={16} />
+            Install GitHub App
           </button>
         </div>
       ) : (

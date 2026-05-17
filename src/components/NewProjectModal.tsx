@@ -42,13 +42,12 @@ function getInlineError(error: unknown, fallback: string): string {
 }
 
 export const NewProjectModal: React.FC<Props> = ({ onClose, onProjectCreated, onNavigate }) => {
-  const { profile, continueWithGitHub, reconnectGitHub } = useAuth()
+  const { profile, installGitHubApp } = useAuth()
   const { setFileMap } = useFiles()
 
   const [repos, setRepos] = useState<GitHubRepo[]>([])
   const [search, setSearch] = useState('')
   const [error, setError] = useState<string | null>(null)
-  const [connectingGitHub, setConnectingGitHub] = useState(false)
   const [loadingRepos, setLoadingRepos] = useState(false)
   const [loadingBranches, setLoadingBranches] = useState(false)
   const [importing, setImporting] = useState(false)
@@ -58,7 +57,7 @@ export const NewProjectModal: React.FC<Props> = ({ onClose, onProjectCreated, on
 
   void onNavigate
 
-  const hasGitHubConnection = Boolean(profile?.github_token)
+  const hasGitHubConnection = Boolean(profile?.github_installation_id || profile?.github_token)
   const step = !hasGitHubConnection ? 'connect' : selectedRepo ? 'branch' : 'repos'
 
   useEffect(() => {
@@ -144,16 +143,9 @@ export const NewProjectModal: React.FC<Props> = ({ onClose, onProjectCreated, on
     )
   }, [repos, search])
 
-  const handleConnectGitHub = async () => {
+  const handleConnectGitHub = () => {
     setError(null)
-    setConnectingGitHub(true)
-    const { error: oauthError } = profile?.id
-      ? await reconnectGitHub()
-      : await continueWithGitHub()
-    if (oauthError) {
-      setError(oauthError.message || 'Failed to connect GitHub.')
-      setConnectingGitHub(false)
-    }
+    installGitHubApp()
   }
 
   const handleSelectRepo = (repo: GitHubRepo) => {
@@ -226,7 +218,7 @@ export const NewProjectModal: React.FC<Props> = ({ onClose, onProjectCreated, on
     }
   }
 
-  const isBusy = connectingGitHub || importing
+  const isBusy = importing
 
   return (
     <>
@@ -349,12 +341,11 @@ export const NewProjectModal: React.FC<Props> = ({ onClose, onProjectCreated, on
 
               <button
                 onClick={handleConnectGitHub}
-                disabled={connectingGitHub}
                 className="btn btn-primary"
                 style={{ alignSelf: 'flex-start', gap: 8 }}
               >
-                {connectingGitHub ? <Loader2 size={16} className="spin" /> : <Github size={16} />}
-                {connectingGitHub ? 'Connecting...' : 'Connect GitHub'}
+                <Github size={16} />
+                Install GitHub App
               </button>
             </div>
           )}
