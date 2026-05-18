@@ -486,9 +486,6 @@ export const ProjectsPage: React.FC<ProjectsPageProps> = ({ onOpenProject, onNav
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12, marginTop: 80 }}>
           <FolderOpen size={24} style={{ color: 'var(--ink-muted)' }} />
           <p style={{ fontSize: 14, color: 'var(--ink-muted)' }}>No projects yet</p>
-          <button className="btn btn-primary" style={{ marginTop: 4 }} onClick={() => setShowModal(true)}>
-            <Plus size={14} /> New Project
-          </button>
         </div>
       ) : (
         <div style={{

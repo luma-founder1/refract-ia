@@ -22,6 +22,7 @@ import {
 } from '../lib/api'
 import { useFiles } from '../context/FilesContext'
 import { useAuth } from '../lib/AuthContext'
+import { supabase } from '../lib/supabase'
 import type { Project } from '../shared/types'
 
 const GitHubIcon: React.FC<{ size?: number }> = ({ size = 20 }) => (
@@ -37,7 +38,7 @@ interface BranchModalState {
 }
 
 export const ReposPage: React.FC<{ onNavigate: (page: string, params?: any) => void }> = ({ onNavigate }) => {
-  const { profile, installGitHubApp } = useAuth()
+  const { profile, installGitHubApp, refreshProfile } = useAuth()
   const { setFileMap } = useFiles()
   const [repos, setRepos] = useState<GitHubRepo[]>([])
   const [loading, setLoading] = useState(false)
@@ -47,6 +48,29 @@ export const ReposPage: React.FC<{ onNavigate: (page: string, params?: any) => v
   const [loadingBranchesFor, setLoadingBranchesFor] = useState<number | null>(null)
   const [cloningRepoId, setCloningRepoId] = useState<number | null>(null)
   const [branchModal, setBranchModal] = useState<BranchModalState | null>(null)
+
+  // ── Capturar installation_id da URL após redirect da GitHub App ──────────────
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search)
+    const installationId = params.get('installation_id')
+
+    if (!installationId || !profile?.id) return
+
+    // Limpar URL
+    window.history.replaceState({}, '', window.location.pathname)
+
+    supabase
+      .from('users')
+      .update({ github_installation_id: Number(installationId) })
+      .eq('id', profile.id)
+      .then(({ error }) => {
+        if (error) {
+          setError('Failed to save GitHub connection. Please try again.')
+        } else {
+          refreshProfile()
+        }
+      })
+  }, [profile?.id])
 
   const hasGitHubConnection = Boolean(profile?.github_installation_id || profile?.github_token)
 
