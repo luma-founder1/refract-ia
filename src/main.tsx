@@ -20,6 +20,14 @@ if (highlightProjectId) {
   })
 }
 
+// Capturar installation_id da GitHub App antes de qualquer render
+const params = new URLSearchParams(window.location.search)
+const installationId = params.get('installation_id')
+if (installationId) {
+  localStorage.setItem('pending_installation_id', installationId)
+  window.history.replaceState({}, '', '/')
+}
+
 /**
  * Renderer entry point for Refract.
  */

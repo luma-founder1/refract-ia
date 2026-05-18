@@ -51,17 +51,14 @@ export const ReposPage: React.FC<{ onNavigate: (page: string, params?: any) => v
 
   // ── Capturar installation_id da URL após redirect da GitHub App ──────────────
   useEffect(() => {
-    const params = new URLSearchParams(window.location.search)
-    const installationId = params.get('installation_id')
+    const pendingId = localStorage.getItem('pending_installation_id')
+    if (!pendingId || !profile?.id) return
 
-    if (!installationId || !profile?.id) return
-
-    // Limpar URL
-    window.history.replaceState({}, '', window.location.pathname)
+    localStorage.removeItem('pending_installation_id')
 
     supabase
       .from('users')
-      .update({ github_installation_id: Number(installationId) })
+      .update({ github_installation_id: Number(pendingId) })
       .eq('id', profile.id)
       .then(({ error }) => {
         if (error) {
